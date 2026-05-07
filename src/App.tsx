@@ -1,12 +1,17 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, Maximize, ZoomIn, ZoomOut, MousePointer2, Move, Cable, Download } from 'lucide-react';
+import { Plus, Maximize, ZoomIn, ZoomOut, MousePointer2, Move, Cable, Download, Square } from 'lucide-react';
 import { toPng } from 'html-to-image';
-import { TIA_COLORS, getCableStructure, CableData, Connection, DotRef, DraggingLine, getDotWorldPos } from './constants';
+import { TIA_COLORS, getCableStructure, CableData, Connection, DotRef, DraggingLine, getDotWorldPos, WorkZone } from './constants';
 import { CableNode } from './components/CableNode';
+import { WorkZoneDialog } from './components/WorkZoneDialog';
+import { Trash2 } from 'lucide-react';
 
 export default function App() {
   const [selectionBox, setSelectionBox] = useState<{ start: { x: number, y: number }, end: { x: number, y: number } } | null>(null);
+  const [tool, setTool] = useState<'select' | 'workzone'>('select');
+  const [workZones, setWorkZones] = useState<WorkZone[]>([]);
+  const [editingWorkZone, setEditingWorkZone] = useState<WorkZone | null>(null);
 
   const [cables, setCables] = useState<CableData[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
@@ -37,12 +42,10 @@ export default function App() {
 
     // Left click logic
     if (e.button === 0) {
-      // Don't start box if we are interacting with specific UI elements
       if (target.closest('.cable-trunk')) return;
       if (target.closest('input')) return;
       if (target.closest('select')) return;
       if (target.closest('button')) return;
-      // Don't start box if clicking a dot
       if (target.tagName === 'circle' && target.classList.contains('cursor-pointer')) return;
 
       const rect = containerRef.current?.getBoundingClientRect();
@@ -52,7 +55,8 @@ export default function App() {
       const y = (e.clientY - rect.top - pan.y) / scale;
 
       setSelectionBox({ start: { x, y }, end: { x, y } });
-      if (!e.ctrlKey && !e.metaKey) {
+      
+      if (tool === 'select' && !e.ctrlKey && !e.metaKey) {
         setSelectedDots([]);
       }
     }
@@ -76,43 +80,43 @@ export default function App() {
     if (selectionBox) {
       setSelectionBox(prev => prev ? { ...prev, end: { x, y } } : null);
       
-      // Real-time marquee selection
-      const xMin = Math.min(selectionBox.start.x, x);
-      const xMax = Math.max(selectionBox.start.x, x);
-      const yMin = Math.min(selectionBox.start.y, y);
-      const yMax = Math.max(selectionBox.start.y, y);
+      if (tool === 'select') {
+        const xMin = Math.min(selectionBox.start.x, x);
+        const xMax = Math.max(selectionBox.start.x, x);
+        const yMin = Math.min(selectionBox.start.y, y);
+        const yMax = Math.max(selectionBox.start.y, y);
 
-      const newlySelected: DotRef[] = [];
-      cables.forEach(cable => {
-        ['left', 'right'].forEach(sideStr => {
-          const side = sideStr as 'left' | 'right';
-          const expandedTubes = side === 'left' ? cable.leftExp : cable.rightExp;
-          if (expandedTubes.length === 0) return;
+        const newlySelected: DotRef[] = [];
+        cables.forEach(cable => {
+          ['left', 'right'].forEach(sideStr => {
+            const side = sideStr as 'left' | 'right';
+            const expandedTubes = side === 'left' ? cable.leftExp : cable.rightExp;
+            if (expandedTubes.length === 0) return;
 
-          expandedTubes.forEach(exp => {
-            cable.tubes[exp].strands.forEach((_, sIdx) => {
-              const ref: DotRef = { cableId: cable.id, side, tubeIdx: exp, strandIdx: sIdx };
-              const pos = getDotWorldPos(cable, ref);
-              if (pos.x >= xMin && pos.x <= xMax && pos.y >= yMin && pos.y <= yMax) {
-                newlySelected.push(ref);
-              }
+            expandedTubes.forEach(exp => {
+              cable.tubes[exp].strands.forEach((_, sIdx) => {
+                const ref: DotRef = { cableId: cable.id, side, tubeIdx: exp, strandIdx: sIdx };
+                const pos = getDotWorldPos(cable, ref);
+                if (pos.x >= xMin && pos.x <= xMax && pos.y >= yMin && pos.y <= yMax) {
+                  newlySelected.push(ref);
+                }
+              });
             });
           });
         });
-      });
-      setSelectedDots(prev => {
-        if (e.ctrlKey || e.metaKey) {
-          // Add unique
-          const combined = [...prev];
-          newlySelected.forEach(ns => {
-            if (!combined.some(c => c.cableId === ns.cableId && c.side === ns.side && c.strandIdx === ns.strandIdx)) {
-              combined.push(ns);
-            }
-          });
-          return combined;
-        }
-        return newlySelected;
-      });
+        setSelectedDots(prev => {
+          if (e.ctrlKey || e.metaKey) {
+            const combined = [...prev];
+            newlySelected.forEach(ns => {
+              if (!combined.some(c => c.cableId === ns.cableId && c.side === ns.side && c.strandIdx === ns.strandIdx)) {
+                combined.push(ns);
+              }
+            });
+            return combined;
+          }
+          return newlySelected;
+        });
+      }
     }
 
     if (draggingCableId) {
@@ -184,13 +188,32 @@ export default function App() {
       setGlowIntensity(intensity);
       setDraggingLine(prev => prev ? { ...prev, toX: finalToX, toY: finalToY } : null);
     }
-  }, [isPanning, draggingCableId, pan, scale, dragOffset, draggingLine, cables]);
+  }, [isPanning, draggingCableId, pan, scale, dragOffset, draggingLine, cables, selectionBox, tool]);
 
   const handleMouseUp = () => {
     if (draggingLine && glowTarget) {
       completePatch(glowTarget);
     }
     
+    if (selectionBox && tool === 'workzone') {
+      const width = Math.abs(selectionBox.end.x - selectionBox.start.x);
+      const height = Math.abs(selectionBox.end.y - selectionBox.start.y);
+      
+      if (width > 20 && height > 20) {
+        const newZone: WorkZone = {
+          id: Math.random().toString(36).substr(2, 9),
+          x: Math.min(selectionBox.start.x, selectionBox.end.x),
+          y: Math.min(selectionBox.start.y, selectionBox.end.y),
+          width,
+          height,
+          label: 'New Work Zone',
+          description: '',
+        };
+        // setWorkZones(prev => [...prev, newZone]); // Delayed until confirmed in prompt
+        setEditingWorkZone(newZone);
+      }
+    }
+
     setIsPanning(false);
     setDraggingCableId(null);
     setDraggingLine(null);
@@ -464,6 +487,27 @@ export default function App() {
 
           <div className="h-6 w-[1px] bg-white/10 mx-2" />
 
+          <div className="flex bg-[#1a1c25] p-1 rounded-lg border border-white/5 mx-2">
+            <button 
+              onClick={() => setTool('select')}
+              className={`px-3 py-1.5 rounded text-[0.7rem] font-mono flex items-center gap-2 transition-all ${
+                tool === 'select' ? 'bg-[var(--accent)] text-[#0a0c12] font-bold shadow-[0_0_10px_rgba(0,210,255,0.4)]' : 'text-white/40 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <MousePointer2 className="w-3.5 h-3.5" />
+              SELECT
+            </button>
+            <button 
+              onClick={() => setTool('workzone')}
+              className={`px-3 py-1.5 rounded text-[0.7rem] font-mono flex items-center gap-2 transition-all ${
+                tool === 'workzone' ? 'bg-[var(--accent)] text-[#0a0c12] font-bold shadow-[0_0_10px_rgba(0,210,255,0.4)]' : 'text-white/40 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <Square className="w-3.5 h-3.5" />
+              WORK ZONE
+            </button>
+          </div>
+
           <div className="flex bg-[#1a1c25] p-1 rounded-lg border border-white/5 opacity-50 grayscale pointer-events-none">
             <div className="px-3 py-1.5 text-[0.7rem] font-mono flex items-center gap-2 text-white/40">
               <Move className="w-3.5 h-3.5" />
@@ -527,7 +571,9 @@ export default function App() {
           {/* Selection Box overlay */}
           {selectionBox && (
             <div 
-              className="absolute border border-[#3b82f6] bg-[#3b82f6]/10 pointer-events-none z-[1000] selection-box-overlay"
+              className={`absolute border pointer-events-none z-[1000] selection-box-overlay ${
+                tool === 'workzone' ? 'border-[var(--accent)] bg-[var(--accent)]/10' : 'border-[#3b82f6] bg-[#3b82f6]/10'
+              }`}
               style={{
                 left: Math.min(selectionBox.start.x, selectionBox.end.x),
                 top: Math.min(selectionBox.start.y, selectionBox.end.y),
@@ -536,6 +582,36 @@ export default function App() {
               }}
             />
           )}
+
+          {/* Work Zones Layer */}
+          {workZones.map(zone => (
+            <div 
+              key={zone.id}
+              className="absolute border-2 border-dashed border-white/20 bg-white/[0.02] rounded-lg group"
+              style={{
+                left: zone.x,
+                top: zone.y,
+                width: zone.width,
+                height: zone.height,
+              }}
+            >
+              <div className="absolute -top-8 left-0 flex items-start gap-3 max-w-[400px]">
+                <div className="bg-white/10 backdrop-blur-sm border border-white/10 px-2 py-1.5 rounded text-[0.7rem] font-mono text-white/90 shadow-xl flex items-start gap-2">
+                  <Square size={10} className="text-[var(--accent)] mt-0.5 shrink-0" />
+                  <div className="flex flex-col gap-0.5 min-w-0">
+                    <span className="font-bold whitespace-pre-wrap break-words">{zone.label}</span>
+                    {zone.description && <span className="opacity-50 text-[0.6rem] leading-relaxed break-words line-clamp-2">{zone.description}</span>}
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setWorkZones(prev => prev.filter(z => z.id !== zone.id))}
+                  className="w-5 h-5 bg-red-500/10 border border-red-500/20 text-red-500/40 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 hover:text-red-500 hover:bg-red-500/20 transition-all cursor-pointer"
+                >
+                  <Trash2 size={10} />
+                </button>
+              </div>
+            </div>
+          ))}
 
           {/* Connections Layer */}
           <svg className="absolute inset-0 pointer-events-none w-[10000px] h-[10000px] -translate-x-[5000px] -translate-y-[5000px]">
@@ -664,6 +740,19 @@ export default function App() {
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 pointer-events-none text-[0.7rem] text-[var(--text-dim)] font-mono tracking-widest uppercase opacity-60 z-[200] hidden md:block">
           SCROLL to zoom • RIGHT-CLICK/WHEEL to pan • LEFT-CLICK to interact • DOUBLE-CLICK fiber to DELETE connection
         </div>
+
+        <AnimatePresence>
+          {editingWorkZone && (
+            <WorkZoneDialog 
+              workZone={editingWorkZone}
+              onSave={(updated) => {
+                setWorkZones(prev => [...prev, updated]);
+                setEditingWorkZone(null);
+              }}
+              onCancel={() => setEditingWorkZone(null)}
+            />
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

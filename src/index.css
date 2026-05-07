@@ -92,6 +92,23 @@
   print-color-adjust: exact !important;
 }
 
+.export-mode .border-dashed {
+  border-style: solid !important;
+  border-color: #cbd5e1 !important;
+  background: rgba(241, 245, 249, 0.5) !important;
+}
+
+.export-mode .bg-white\/10 {
+  background: white !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #0f172a !important;
+  text-shadow: none !important;
+}
+
+.export-mode .bg-white\/10 * {
+  color: #0f172a !important;
+}
+
 :root {
   --bg: #0a0d12;
   --panel: #0f1520;

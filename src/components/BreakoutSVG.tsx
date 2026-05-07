@@ -42,9 +42,6 @@ export const BreakoutSVG: React.FC<BreakoutSVGProps> = ({
   const tubeLabelX = isLeft ? pillX - LAYOUT.LABEL_GAP : pillX + LAYOUT.PILL_W + LAYOUT.LABEL_GAP;
   const tubeLabelAnchor = isLeft ? 'end' : 'start';
 
-  const fiberLabelX = isLeft ? dotX - LAYOUT.STRAND_R - LAYOUT.FIBER_GAP : dotX + LAYOUT.STRAND_R + LAYOUT.FIBER_GAP;
-  const fiberLabelAnchor = isLeft ? 'end' : 'start';
-
   let curY = LAYOUT.TUBE_PAD;
 
   return (
@@ -125,14 +122,15 @@ export const BreakoutSVG: React.FC<BreakoutSVGProps> = ({
                   onDoubleClick={(e) => onDotDoubleClick(e, { cableId, side, tubeIdx: ti, strandIdx: si })}
                 />
                 <text
-                  x={fiberLabelX}
-                  y={dotCY + 4}
-                  textAnchor={fiberLabelAnchor}
-                  className={`font-mono text-[8.5px] pointer-events-none transition-colors ${
-                    isSelected ? 'fill-[var(--accent)] font-bold' : 'fill-[rgba(210,235,255,0.85)]'
+                  x={dotX}
+                  y={dotCY - LAYOUT.STRAND_R - 5}
+                  textAnchor="middle"
+                  className={`font-mono text-[9px] pointer-events-none transition-colors ${
+                    isSelected ? 'fill-[var(--accent)] font-bold' : 'fill-[rgba(210,235,255,0.95)]'
                   }`}
+                  style={{ textShadow: '0 0 4px rgba(0,0,0,0.5)' }}
                 >
-                  {`${strand.label} ${strand.color.name}`}
+                  {strand.label}
                 </text>
               </g>
             );
@@ -176,6 +174,18 @@ export const BreakoutSVG: React.FC<BreakoutSVGProps> = ({
               className="cursor-pointer"
               onClick={() => onToggleTube(ti)}
             />
+            {tube.binderColor && (
+              <line
+                x1={pillX + 2}
+                y1={pillCY}
+                x2={pillX + LAYOUT.PILL_W - 2}
+                y2={pillCY}
+                stroke={tube.binderColor}
+                strokeWidth="2"
+                strokeLinecap="round"
+                className="pointer-events-none"
+              />
+            )}
             {expansionContent}
           </g>
         );

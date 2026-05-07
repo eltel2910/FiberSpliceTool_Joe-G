@@ -1,21 +1,22 @@
 export interface TIAColor {
   name: string;
   hex: string;
+  abb: string;
 }
 
 export const TIA_COLORS: TIAColor[] = [
-  { name: 'Blue', hex: '#1a73e8' },
-  { name: 'Orange', hex: '#f57c00' },
-  { name: 'Green', hex: '#2e7d32' },
-  { name: 'Brown', hex: '#8d6e63' },
-  { name: 'Slate', hex: '#78909c' },
-  { name: 'White', hex: '#e0e0e0' },
-  { name: 'Red', hex: '#e53935' },
-  { name: 'Black', hex: '#616161' },
-  { name: 'Yellow', hex: '#fdd835' },
-  { name: 'Violet', hex: '#8e24aa' },
-  { name: 'Rose', hex: '#f48fb1' },
-  { name: 'Aqua', hex: '#00acc1' },
+  { name: 'Blue', hex: '#1a73e8', abb: 'BL' },
+  { name: 'Orange', hex: '#f57c00', abb: 'OR' },
+  { name: 'Green', hex: '#2e7d32', abb: 'GR' },
+  { name: 'Brown', hex: '#8d6e63', abb: 'BR' },
+  { name: 'Slate', hex: '#78909c', abb: 'SL' },
+  { name: 'White', hex: '#e0e0e0', abb: 'WH' },
+  { name: 'Red', hex: '#e53935', abb: 'RD' },
+  { name: 'Black', hex: '#616161', abb: 'BK' },
+  { name: 'Yellow', hex: '#fdd835', abb: 'YL' },
+  { name: 'Violet', hex: '#8e24aa', abb: 'VI' },
+  { name: 'Rose', hex: '#f48fb1', abb: 'RS' },
+  { name: 'Aqua', hex: '#00acc1', abb: 'AQ' },
 ];
 
 export interface Strand {
@@ -27,6 +28,7 @@ export interface Strand {
 export interface Tube {
   index: number;
   color: TIAColor;
+  binderColor: string | null;
   label: string;
   strands: (Strand | null)[];
 }
@@ -42,6 +44,16 @@ export interface CableData {
   rightExp: number[];
 }
 
+export interface WorkZone {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  label: string;
+  description: string;
+}
+
 export const LAYOUT = {
   TUBE_H: 20,
   TUBE_PAD: 8,
@@ -50,13 +62,13 @@ export const LAYOUT = {
   PILL_RX: 6,
   PILL_INSET: 2,
   STRAND_R: 6,
-  STRAND_STEP: 19,
-  STRAND_PAD_V: 8,
-  FAN_GAP: 38,
+  STRAND_STEP: 32,
+  STRAND_PAD_V: 12,
+  FAN_GAP: 42,
   LABEL_GAP: 5,
-  FIBER_GAP: 5,
+  FIBER_GAP: 8,
   BO_TUBE_ONLY: 120,
-  BO_EXPANDED: 210,
+  BO_EXPANDED: 240,
 };
 
 export interface Connection {
@@ -79,16 +91,38 @@ export interface DraggingLine {
 }
 
 export function getCableStructure(fiberCount: number): Tube[] {
-  return Array.from({ length: fiberCount / 12 }, (_, t) => ({
-    index: t + 1,
-    color: TIA_COLORS[t % 12],
-    label: `T${t + 1} ${TIA_COLORS[t % 12].name}`,
-    strands: TIA_COLORS.map((sc, si) => ({
-      index: si + 1,
-      color: sc,
-      label: `F${t * 12 + si + 1}`,
-    })),
-  }));
+  const tubeCount = Math.ceil(fiberCount / 12);
+  return Array.from({ length: tubeCount }, (_, t) => {
+    const tubeBaseIdx = t % 12;
+    const baseColor = TIA_COLORS[tubeBaseIdx];
+    let binderSuffix = "";
+    let binderColor: string | null = null;
+    
+    if (t >= 12 && t < 24) {
+      binderSuffix = "+BK";
+      binderColor = "#000000";
+    } else if (t >= 24 && t < 36) {
+      binderSuffix = "+RD";
+      binderColor = "#e53935";
+    }
+
+    const tubeLabel = `${baseColor.abb}${binderSuffix} (${(t + 1).toString().padStart(2, '0')})`;
+
+    return {
+      index: t + 1,
+      color: baseColor,
+      binderColor,
+      label: tubeLabel,
+      strands: TIA_COLORS.map((sc, si) => {
+        const fiberNum = t * 12 + si + 1;
+        return {
+          index: si + 1,
+          color: sc,
+          label: `${sc.abb} (${fiberNum.toString().padStart(3, '0')})`,
+        };
+      }),
+    };
+  });
 }
 
 export function getDotWorldPos(cable: CableData, ref: DotRef): { x: number; y: number } {
