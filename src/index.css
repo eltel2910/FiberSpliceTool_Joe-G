@@ -1,0 +1,126 @@
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;400;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Exo 2", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Share Tech Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@media print, .export-mode {
+  :root {
+    --bg: #ffffff;
+    --panel: #ffffff;
+    --panel2: #f8fafc;
+    --border: #e2e8f0;
+    --accent: #2563eb;
+    --accent2: #7c3aed;
+    --text: #0f172a;
+    --text-dim: #475569;
+    --glow: none;
+    --grid: transparent;
+  }
+}
+
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  header, .fixed, .no-print {
+    display: none !important;
+  }
+}
+
+.export-mode {
+  background: white !important;
+  color: black !important;
+}
+
+.export-mode .futuristic-grid {
+  background-image: none !important;
+}
+
+.export-mode header, 
+.export-mode .fixed, 
+.export-mode .no-print {
+  display: none !important;
+}
+
+.export-mode .cable-trunk {
+  background: #f1f5f9 !important;
+  border: 2px solid #cbd5e1 !important;
+  box-shadow: none !important;
+  color: #0f172a !important;
+}
+
+.export-mode .cable-trunk *:not(.cable-name-input),
+.export-mode .glow-text:not(.cable-name-input),
+.export-mode text,
+.export-mode span,
+.export-mode strong,
+.export-mode div:not(.cable-trunk) {
+  text-shadow: none !important;
+  color: #0f172a !important;
+  fill: #0f172a !important;
+}
+
+.export-mode svg circle {
+  stroke-width: 1px !important;
+}
+
+.export-mode .cable-name-input {
+  color: #c00000 !important;
+  fill: #c00000 !important;
+  font-weight: 900 !important;
+  font-size: 1.2rem !important;
+  opacity: 1 !important;
+  text-shadow: none !important;
+  background: transparent !important;
+  -webkit-text-fill-color: #c00000 !important;
+}
+
+.export-mode input:not(.cable-name-input) {
+  border: none !important;
+  background: transparent !important;
+  color: #0f172a !important;
+}
+
+/* Ensure text is dark and visible during export */
+.export-mode * {
+  color-adjust: exact !important;
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
+}
+
+:root {
+  --bg: #0a0d12;
+  --panel: #0f1520;
+  --panel2: #141c2b;
+  --border: #1e2d45;
+  --accent: #00c8ff;
+  --accent2: #ff6a00;
+  --text: #cce4ff;
+  --text-dim: #4a6a8a;
+  --glow: 0 0 12px rgba(0, 200, 255, 0.35);
+  --grid: rgba(0, 200, 255, 0.04);
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  overflow: hidden;
+}
+
+@layer utilities {
+  .glow-text {
+    text-shadow: var(--glow);
+  }
+  .futuristic-grid {
+    background-image: 
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+}
+
