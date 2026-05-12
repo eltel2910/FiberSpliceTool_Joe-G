@@ -44,6 +44,16 @@ export interface CableData {
   rightExp: number[];
 }
 
+export interface NetworkEquipment {
+  id: string;
+  name: string;
+  building: string;
+  ports: number;
+  x: number;
+  y: number;
+  side: 'left' | 'right';
+}
+
 export interface WorkZone {
   id: string;
   x: number;
@@ -69,19 +79,74 @@ export const LAYOUT = {
   FIBER_GAP: 8,
   BO_TUBE_ONLY: 120,
   BO_EXPANDED: 240,
+  EQUIP_PORT_GAP: 24,
+  EQUIP_WIDTH: 200,
 };
 
 export interface Connection {
   id: string;
   from: DotRef;
   to: DotRef;
+  circuitName?: string;
 }
 
 export interface DotRef {
-  cableId: string;
+  cableId?: string;
+  equipmentId?: string;
   side: 'left' | 'right';
   tubeIdx: number;
   strandIdx: number;
+}
+
+export function dotsEqual(a: DotRef | null | undefined, b: DotRef | null | undefined) {
+  if (!a || !b) return false;
+  const sameCables = a.cableId === b.cableId && 
+                    a.side === b.side && 
+                    a.tubeIdx === b.tubeIdx && 
+                    a.strandIdx === b.strandIdx;
+  const sameEquip = a.equipmentId && b.equipmentId && 
+                    a.equipmentId === b.equipmentId && 
+                    a.strandIdx === b.strandIdx;
+  
+  if (a.equipmentId || b.equipmentId) return !!sameEquip;
+  return sameCables;
+}
+
+export function findCircuitPath(startDot: DotRef | null, connections: Connection[]): Connection[] {
+  const path: Connection[] = [];
+  if (!startDot) return path;
+  const visited = new Set<string>();
+
+  const dotToKey = (d: DotRef) => d.equipmentId 
+    ? `equip-${d.equipmentId}-${d.strandIdx}`
+    : `cable-${d.cableId}-${d.side}-${d.tubeIdx}-${d.strandIdx}`;
+
+  const traverse = (dot: DotRef) => {
+    const key = dotToKey(dot);
+    if (visited.has(key)) return;
+    visited.add(key);
+
+    // 1. External Splices (Connections)
+    const related = connections.filter(c => dotsEqual(c.from, dot) || dotsEqual(c.to, dot));
+    related.forEach(conn => {
+      if (!path.some(p => p.id === conn.id)) {
+        path.push(conn);
+        const nextDot = dotsEqual(conn.from, dot) ? conn.to : conn.from;
+        traverse(nextDot);
+      }
+    });
+
+    // 2. Internal Cable Crossing (The strand continues through the cable)
+    // Equipment doesn't "cross through" like a cable unless we define it so, for now it's a terminal point
+    if (!dot.equipmentId) {
+      const otherSide: 'left' | 'right' = dot.side === 'left' ? 'right' : 'left';
+      const internalDot: DotRef = { ...dot, side: otherSide };
+      traverse(internalDot);
+    }
+  };
+
+  traverse(startDot);
+  return path;
 }
 
 export interface DraggingLine {
@@ -126,6 +191,12 @@ export function getCableStructure(fiberCount: number): Tube[] {
 }
 
 export function getDotWorldPos(cable: CableData, ref: DotRef): { x: number; y: number } {
+  if (ref.equipmentId) {
+    // This function is generally called with the node as the first arg.
+    // In App.tsx, we need to adapt this.
+    return { x: 0, y: 0 }; // Placeholder, will handle in App.tsx
+  }
+
   const isLeft = ref.side === 'left';
   const expandedTubes = isLeft ? cable.leftExp : cable.rightExp;
   const hasExp = expandedTubes.length > 0;

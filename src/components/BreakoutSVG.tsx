@@ -7,12 +7,15 @@ interface BreakoutSVGProps {
   side: 'left' | 'right';
   expandedTubes: number[];
   selectedDots: DotRef[];
+  selectedAnalysisDots?: DotRef[];
   glowTarget: DotRef | null;
   glowIntensity: number;
   onToggleTube: (index: number) => void;
   onDotMouseDown: (e: React.MouseEvent, ref: DotRef) => void;
   onDotMouseUp: (e: React.MouseEvent, ref: DotRef) => void;
   onDotDoubleClick: (e: React.MouseEvent, ref: DotRef) => void;
+  onDotHover: (e: React.MouseEvent, ref: DotRef, isEnter: boolean) => void;
+  onDotClick?: (e: React.MouseEvent, ref: DotRef) => void;
 }
 
 export const BreakoutSVG: React.FC<BreakoutSVGProps> = ({
@@ -21,12 +24,15 @@ export const BreakoutSVG: React.FC<BreakoutSVGProps> = ({
   side,
   expandedTubes,
   selectedDots,
+  selectedAnalysisDots = [],
   glowTarget,
   glowIntensity,
   onToggleTube,
   onDotMouseDown,
   onDotMouseUp,
   onDotDoubleClick,
+  onDotHover,
+  onDotClick,
 }) => {
   const isLeft = side === 'left';
   const hasExp = expandedTubes.length > 0;
@@ -76,6 +82,13 @@ export const BreakoutSVG: React.FC<BreakoutSVGProps> = ({
               d.strandIdx === si
             );
 
+            const isAnalysisSelected = selectedAnalysisDots.some(d => 
+              d.cableId === cableId && 
+              d.side === side && 
+              d.tubeIdx === ti && 
+              d.strandIdx === si
+            );
+
             const isGlow = glowTarget && 
               glowTarget.cableId === cableId && 
               glowTarget.side === side && 
@@ -85,8 +98,10 @@ export const BreakoutSVG: React.FC<BreakoutSVGProps> = ({
             const glowSize = isGlow ? 4 + glowIntensity * 6 : 0;
             const glowOpacity = isGlow ? 0.3 + glowIntensity * 0.7 : 0;
 
+            const ref: DotRef = { cableId, side, tubeIdx: ti, strandIdx: si };
+
             return (
-              <g key={`strand-${si}`}>
+              <g key={`strand-${si}`} className="group/strand">
                 <path
                   d={`M${pillOutX},${pillCY} C${cp1x},${pillCY} ${cp2x},${dotCY} ${dotX},${dotCY}`}
                   stroke={strand.color.hex}
@@ -94,6 +109,7 @@ export const BreakoutSVG: React.FC<BreakoutSVGProps> = ({
                   strokeOpacity="0.6"
                   fill="none"
                 />
+                
                 {isGlow && (
                   <circle
                     cx={dotX}
@@ -106,32 +122,72 @@ export const BreakoutSVG: React.FC<BreakoutSVGProps> = ({
                     className="pointer-events-none"
                   />
                 )}
+                
+                {/* Red Glow for Analysis Selection */}
+                {isAnalysisSelected && (
+                  <circle
+                    cx={dotX}
+                    cy={dotCY}
+                    r={LAYOUT.STRAND_R + 8}
+                    fill="none"
+                    stroke="#ff0000"
+                    strokeWidth="3"
+                    className="pointer-events-none animate-pulse"
+                    style={{ filter: 'drop-shadow(0 0 10px rgba(255,0,0,0.8))' }}
+                  />
+                )}
+
                 <circle
                   cx={dotX}
                   cy={dotCY}
                   r={LAYOUT.STRAND_R}
                   fill={strand.color.hex}
-                  stroke={isGlow ? "var(--accent)" : (isSelected ? "var(--accent)" : "rgba(255,255,255,0.4)")}
-                  strokeWidth={isGlow ? 2.5 : (isSelected ? 2 : 1)}
-                  className="cursor-pointer hover:stroke-white hover:stroke-2 transition-all"
+                  stroke={isGlow ? "var(--accent)" : (isAnalysisSelected ? "#ff0000" : (isSelected ? "var(--accent)" : "rgba(255,255,255,0.4)"))}
+                  strokeWidth={isGlow ? 2.5 : (isAnalysisSelected ? 3 : (isSelected ? 2 : 1))}
+                  className="pointer-events-none transition-all"
                   style={{
-                    filter: (isSelected || isGlow) ? `drop-shadow(0 0 ${4 + (isGlow ? glowIntensity * 12 : 4)}px var(--accent))` : 'none'
+                    filter: isAnalysisSelected ? `drop-shadow(0 0 8px #ff0000)` : (isSelected || isGlow) ? `drop-shadow(0 0 ${4 + (isGlow ? glowIntensity * 12 : 4)}px var(--accent))` : 'none'
                   }}
-                  onMouseDown={(e) => onDotMouseDown(e, { cableId, side, tubeIdx: ti, strandIdx: si })}
-                  onMouseUp={(e) => onDotMouseUp(e, { cableId, side, tubeIdx: ti, strandIdx: si })}
-                  onDoubleClick={(e) => onDotDoubleClick(e, { cableId, side, tubeIdx: ti, strandIdx: si })}
                 />
                 <text
                   x={dotX}
                   y={dotCY - LAYOUT.STRAND_R - 5}
                   textAnchor="middle"
                   className={`font-mono text-[9px] pointer-events-none transition-colors ${
-                    isSelected ? 'fill-[var(--accent)] font-bold' : 'fill-[rgba(210,235,255,0.95)]'
+                    isAnalysisSelected ? 'fill-red-400 font-black' : isSelected ? 'fill-[var(--accent)] font-bold' : 'fill-[rgba(210,235,255,0.95)]'
                   }`}
                   style={{ textShadow: '0 0 4px rgba(0,0,0,0.5)' }}
                 >
                   {strand.label}
                 </text>
+
+                {/* Larger hit area for clicking fibers - MUST BE LAST TO BE ON TOP */}
+                <circle 
+                  cx={dotX} 
+                  cy={dotCY} 
+                  r={LAYOUT.STRAND_R + 15} 
+                  fill="transparent"
+                  className="cursor-pointer fiber-hit-area"
+                  style={{ pointerEvents: 'all' }}
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    onDotMouseDown(e, ref);
+                  }}
+                  onMouseUp={(e) => {
+                    e.stopPropagation();
+                    onDotMouseUp(e, ref);
+                  }}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    onDotDoubleClick(e, ref);
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDotClick?.(e, ref);
+                  }}
+                  onMouseEnter={(e) => onDotHover(e, ref, true)}
+                  onMouseLeave={(e) => onDotHover(e, ref, false)}
+                />
               </g>
             );
           });

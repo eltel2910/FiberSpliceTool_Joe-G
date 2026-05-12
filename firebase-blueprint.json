@@ -1,0 +1,26 @@
+{
+  "entities": {
+    "Project": {
+      "title": "Fiber Project",
+      "description": "Represents a complete fiber network schematic design.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Display name of the project" },
+        "ownerId": { "type": "string", "description": "UID of the user who owns the project" },
+        "cables": { "type": "array", "description": "List of fiber cables in the project" },
+        "networkEquipments": { "type": "array", "description": "List of network equipment in the project" },
+        "connections": { "type": "array", "description": "List of splices and connections between fibers" },
+        "workZones": { "type": "array", "description": "List of work zones defined in the project" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "ownerId", "cables", "networkEquipments", "connections", "workZones", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/projects/{projectId}": {
+      "schema": "Project",
+      "description": "Collection of fiber projects."
+    }
+  }
+}

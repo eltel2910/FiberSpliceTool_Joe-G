@@ -6,7 +6,7 @@
   --font-mono: "Share Tech Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
-@media print, .export-mode {
+@media print {
   :root {
     --bg: #ffffff;
     --panel: #ffffff;
@@ -19,6 +19,19 @@
     --glow: none;
     --grid: transparent;
   }
+}
+
+.export-mode {
+  --bg: #ffffff;
+  --panel: #ffffff;
+  --panel2: #f8fafc;
+  --border: #e2e8f0;
+  --accent: #2563eb;
+  --accent2: #7c3aed;
+  --text: #0f172a;
+  --text-dim: #475569;
+  --glow: none;
+  --grid: transparent;
 }
 
 @media print {
@@ -77,6 +90,18 @@
   text-shadow: none !important;
   background: transparent !important;
   -webkit-text-fill-color: #c00000 !important;
+}
+
+.export-mode .network-chassis {
+  background: #d1d5db !important;
+  border-color: #9ca3af !important;
+  box-shadow: none !important;
+}
+
+.export-mode .network-chassis * {
+  color: #0f172a !important;
+  fill: #0f172a !important;
+  border-color: rgba(0, 0, 0, 0.1) !important;
 }
 
 .export-mode input:not(.cable-name-input) {
@@ -138,6 +163,12 @@ body {
       linear-gradient(var(--grid) 1px, transparent 1px),
       linear-gradient(90deg, var(--grid) 1px, transparent 1px);
     background-size: 40px 40px;
+  }
+}
+
+@keyframes dash {
+  to {
+    stroke-dashoffset: -16;
   }
 }
 

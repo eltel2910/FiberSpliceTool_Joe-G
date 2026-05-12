@@ -7,6 +7,7 @@ interface CableNodeProps {
   cable: CableData;
   scale: number;
   selectedDots: DotRef[];
+  selectedAnalysisDots?: DotRef[];
   glowTarget: DotRef | null;
   glowIntensity: number;
   onUpdate: (id: string, updates: Partial<CableData>) => void;
@@ -15,12 +16,15 @@ interface CableNodeProps {
   onDotMouseDown: (e: React.MouseEvent, ref: DotRef) => void;
   onDotMouseUp: (e: React.MouseEvent, ref: DotRef) => void;
   onDotDoubleClick: (e: React.MouseEvent, ref: DotRef) => void;
+  onDotHover: (e: React.MouseEvent, ref: DotRef, isEnter: boolean) => void;
+  onDotClick?: (e: React.MouseEvent, ref: DotRef) => void;
 }
 
 export const CableNode: React.FC<CableNodeProps> = ({
   cable,
   scale,
   selectedDots,
+  selectedAnalysisDots = [],
   glowTarget,
   glowIntensity,
   onUpdate,
@@ -29,6 +33,8 @@ export const CableNode: React.FC<CableNodeProps> = ({
   onDotMouseDown,
   onDotMouseUp,
   onDotDoubleClick,
+  onDotHover,
+  onDotClick,
 }) => {
   const nodeRef = useRef<HTMLDivElement>(null);
   const [trunkHeight, setTrunkHeight] = useState(80);
@@ -71,6 +77,7 @@ export const CableNode: React.FC<CableNodeProps> = ({
           side="left"
           expandedTubes={cable.leftExp}
           selectedDots={selectedDots}
+          selectedAnalysisDots={selectedAnalysisDots}
           glowTarget={glowTarget}
           glowIntensity={glowIntensity}
           onToggleTube={(idx) => {
@@ -82,6 +89,8 @@ export const CableNode: React.FC<CableNodeProps> = ({
           onDotMouseDown={onDotMouseDown}
           onDotMouseUp={onDotMouseUp}
           onDotDoubleClick={onDotDoubleClick}
+          onDotHover={onDotHover}
+          onDotClick={onDotClick}
         />
       </div>
 
@@ -115,6 +124,7 @@ export const CableNode: React.FC<CableNodeProps> = ({
           side="right"
           expandedTubes={cable.rightExp}
           selectedDots={selectedDots}
+          selectedAnalysisDots={selectedAnalysisDots}
           glowTarget={glowTarget}
           glowIntensity={glowIntensity}
           onToggleTube={(idx) => {
@@ -126,6 +136,8 @@ export const CableNode: React.FC<CableNodeProps> = ({
           onDotMouseDown={onDotMouseDown}
           onDotMouseUp={onDotMouseUp}
           onDotDoubleClick={onDotDoubleClick}
+          onDotHover={onDotHover}
+          onDotClick={onDotClick}
         />
       </div>
     </div>
