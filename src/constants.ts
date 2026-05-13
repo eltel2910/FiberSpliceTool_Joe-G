@@ -36,6 +36,8 @@ export interface Tube {
 export interface CableData {
   id: string;
   name: string;
+  to?: string;
+  from?: string;
   fiberCount: number;
   tubes: Tube[];
   x: number;
@@ -80,7 +82,7 @@ export const LAYOUT = {
   BO_TUBE_ONLY: 120,
   BO_EXPANDED: 240,
   EQUIP_PORT_GAP: 24,
-  EQUIP_WIDTH: 200,
+  EQUIP_WIDTH: 240,
 };
 
 export interface Connection {

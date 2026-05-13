@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, Maximize, ZoomIn, ZoomOut, MousePointer2, Move, Cable, Download, Square, Share2, Zap, BoxSelect, FileCode, Trash2, Database, ImageIcon, FileType, ChevronDown, Copy, Folder } from 'lucide-react';
+import { Plus, Maximize, MousePointer2, Move, Cable, Download, Square, Share2, Zap, BoxSelect, FileCode, Trash2, Database, ImageIcon, FileType, ChevronDown, Copy, Folder, Layers, Settings, Printer, Server } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import { saveAs } from 'file-saver';
 import { exportToDXF } from './services/dxfService';
@@ -32,6 +32,26 @@ export default function App() {
   const [selectionBox, setSelectionBox] = useState<{ start: { x: number, y: number }, end: { x: number, y: number } } | null>(null);
   const [showCircuitList, setShowCircuitList] = useState(false);
   const [tool, setTool] = useState<'select' | 'workzone' | 'analysis'>('select');
+  const [openMenu, setOpenMenu] = useState<'cable' | 'equip' | null>(null);
+  const menuTimeoutRef = useRef<number | null>(null);
+
+  const handleMenuEnter = (m: 'cable' | 'equip') => {
+    if (menuTimeoutRef.current) window.clearTimeout(menuTimeoutRef.current);
+    setOpenMenu(m);
+  };
+
+  const handleMenuLeave = () => {
+    menuTimeoutRef.current = window.setTimeout(() => {
+      setOpenMenu(null);
+    }, 200);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (menuTimeoutRef.current) window.clearTimeout(menuTimeoutRef.current);
+    };
+  }, []);
+
   const [workZones, setWorkZones] = useState<WorkZone[]>([]);
   const [editingWorkZone, setEditingWorkZone] = useState<WorkZone | null>(null);
 
@@ -53,11 +73,13 @@ export default function App() {
   const [selectedPortCount, setSelectedPortCount] = useState(8);
   const [equipmentType, setEquipmentType] = useState('EQUIP-xx');
   const [equipmentBuilding, setEquipmentBuilding] = useState('BUILDING-xx');
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [selectedAnalysisDots, setSelectedAnalysisDots] = useState<DotRef[]>([]);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
+
+  const initialSelectedDotsRef = useRef<DotRef[]>([]);
+  const initialSelectedAnalysisDotsRef = useRef<DotRef[]>([]);
 
   // Pan / Selection Box logic
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -77,16 +99,26 @@ export default function App() {
       if (target.closest('button')) return;
       if (target.classList.contains('cursor-pointer') || target.classList.contains('fiber-hit-area')) return;
 
-      const rect = containerRef.current?.getBoundingClientRect();
-      if (!rect) return;
-
-      const x = (e.clientX - rect.left - pan.x) / scale;
-      const y = (e.clientY - rect.top - pan.y) / scale;
-
-      setSelectionBox({ start: { x, y }, end: { x, y } });
+      const isLasso = tool === 'select' || (tool === 'analysis' && e.ctrlKey);
       
-      if (tool === 'select' && !e.ctrlKey && !e.metaKey) {
-        setSelectedDots([]);
+      if (isLasso) {
+        const rect = containerRef.current?.getBoundingClientRect();
+        if (!rect) return;
+
+        const x = (e.clientX - rect.left - pan.x) / scale;
+        const y = (e.clientY - rect.top - pan.y) / scale;
+
+        setSelectionBox({ start: { x, y }, end: { x, y } });
+        
+        if (e.ctrlKey || e.metaKey) {
+          initialSelectedDotsRef.current = [...selectedDots];
+          initialSelectedAnalysisDotsRef.current = [...selectedAnalysisDots];
+        } else {
+          initialSelectedDotsRef.current = [];
+          initialSelectedAnalysisDotsRef.current = [];
+          setSelectedDots([]);
+          setSelectedAnalysisDots([]);
+        }
       }
     }
   };
@@ -99,7 +131,10 @@ export default function App() {
       const padding = 20;
       const headerHeight = 50;
       const portY = eq.y + headerHeight + padding/2 + ref.strandIdx * portHeight + portHeight/2;
-      const dotX = eq.x + (eq.side === 'left' ? -LAYOUT.FAN_GAP : LAYOUT.EQUIP_WIDTH + LAYOUT.FAN_GAP);
+      const svgW = LAYOUT.FAN_GAP + 20;
+      const dotX = eq.side === 'left' 
+        ? eq.x + 10 
+        : eq.x + LAYOUT.EQUIP_WIDTH + LAYOUT.FAN_GAP;
       return { x: dotX, y: portY };
     }
     const cable = cables.find(c => c.id === ref.cableId);
@@ -113,7 +148,6 @@ export default function App() {
 
     const x = (e.clientX - rect.left - pan.x) / scale;
     const y = (e.clientY - rect.top - pan.y) / scale;
-    setMousePos({ x: Math.round(x), y: Math.round(y) });
 
     if (isPanning) {
       setPan((prev) => ({
@@ -125,7 +159,7 @@ export default function App() {
     if (selectionBox) {
       setSelectionBox(prev => prev ? { ...prev, end: { x, y } } : null);
       
-      if (tool === 'select') {
+      if (tool === 'select' || (tool === 'analysis' && e.ctrlKey)) {
         const xMin = Math.min(selectionBox.start.x, x);
         const xMax = Math.max(selectionBox.start.x, x);
         const yMin = Math.min(selectionBox.start.y, y);
@@ -160,77 +194,117 @@ export default function App() {
           }
         });
 
-        setSelectedDots(prev => {
-          if (e.ctrlKey || e.metaKey) {
-            const combined = [...prev];
-            newlySelected.forEach(ns => {
-              if (!combined.some(c => dotsEqual(c, ns))) {
-                combined.push(ns);
-              }
-            });
+        if (tool === 'analysis') {
+          const base = (e.ctrlKey || e.metaKey) ? initialSelectedAnalysisDotsRef.current : [];
+          const combined = [...base];
+          newlySelected.forEach(ns => {
+            if (!combined.some(c => dotsEqual(c, ns))) {
+              combined.push(ns);
+            }
+          });
+          
+          setSelectedAnalysisDots(prev => {
+            if (prev.length === combined.length && prev.every(p => combined.some(c => dotsEqual(p, c)))) return prev;
             return combined;
-          }
-          return newlySelected;
-        });
+          });
+        } else {
+          const base = (e.ctrlKey || e.metaKey) ? initialSelectedDotsRef.current : [];
+          const combined = [...base];
+          newlySelected.forEach(ns => {
+            if (!combined.some(c => dotsEqual(c, ns))) {
+              combined.push(ns);
+            }
+          });
+          
+          setSelectedDots(prev => {
+            if (prev.length === combined.length && prev.every(p => combined.some(c => dotsEqual(p, c)))) return prev;
+            return combined;
+          });
+        }
       }
     }
 
-    if (draggingCableId) {
+    if (draggingCableId || draggingEquipId) {
+      const draggingId = draggingCableId || draggingEquipId;
       const rx = (e.clientX - rect.left - pan.x) / scale - dragOffset.x;
       const ry = (e.clientY - rect.top - pan.y) / scale - dragOffset.y;
       
-      // Snap to grid (20px)
       const snappedX = Math.round(rx / 20) * 20;
       const snappedY = Math.round(ry / 20) * 20;
 
-      // Detection for alignment guides
       let guideX: number | null = null;
       let guideY: number | null = null;
 
-      cables.forEach(c => {
-        if (c.id === draggingCableId) return;
-        if (Math.abs(snappedX - c.x) < 5) guideX = c.x;
-        if (Math.abs(snappedY - c.y) < 5) guideY = c.y;
+      const getWidth = (obj: any) => {
+        if ('fiberCount' in obj) {
+          const lW = obj.leftExp.length > 0 ? LAYOUT.BO_EXPANDED : LAYOUT.BO_TUBE_ONLY;
+          const rW = obj.rightExp.length > 0 ? LAYOUT.BO_EXPANDED : LAYOUT.BO_TUBE_ONLY;
+          return lW + 164 + rW;
+        }
+        return 300; // NetworkNode approx
+      };
+
+      const getHeight = (obj: any) => {
+        if ('fiberCount' in obj) {
+          const baseH = LAYOUT.TUBE_PAD * 2 + obj.tubes.length * LAYOUT.TUBE_H;
+          const expandedCount = Math.max(obj.leftExp.length, obj.rightExp.length);
+          const expH = expandedCount * (LAYOUT.STRAND_PAD_V * 2 + 12 * LAYOUT.STRAND_STEP);
+          return Math.max(140, baseH + expH);
+        }
+        return 50 + obj.ports * 30 + 20; // NetworkNode totalHeight
+      };
+
+      const draggingObj = cables.find(c => c.id === draggingId) || networkEquipments.find(ne => ne.id === draggingId);
+      if (draggingObj) {
+        const dW = getWidth(draggingObj);
+        const dH = getHeight(draggingObj);
+        const OPTIMAL_SPACING = 100;
+
+        const others = [
+          ...cables.filter(c => c.id !== draggingId),
+          ...networkEquipments.filter(e => e.id !== draggingId)
+        ];
+
+        others.forEach(other => {
+          const oW = getWidth(other);
+          const oH = getHeight(other);
+
+          // Edge alignment (current behavior)
+          if (Math.abs(snappedX - other.x) < 10) guideX = other.x;
+          if (Math.abs(snappedY - other.y) < 10) guideY = other.y;
+          
+          // Spacing alignment X
+          // 1. Dragging right of other
+          if (Math.abs(snappedX - (other.x + oW + OPTIMAL_SPACING)) < 15) {
+            guideX = other.x + oW + OPTIMAL_SPACING;
+          }
+          // 2. Dragging left of other
+          if (Math.abs((snappedX + dW) - (other.x - OPTIMAL_SPACING)) < 15) {
+            guideX = other.x - OPTIMAL_SPACING - dW;
+          }
+
+          // Spacing alignment Y
+          // 1. Dragging below other
+          if (Math.abs(snappedY - (other.y + oH + OPTIMAL_SPACING)) < 15) {
+            guideY = other.y + oH + OPTIMAL_SPACING;
+          }
+          // 2. Dragging above other
+          if (Math.abs((snappedY + dH) - (other.y - OPTIMAL_SPACING)) < 15) {
+            guideY = other.y - OPTIMAL_SPACING - dH;
+          }
+        });
+      }
+
+      setAlignmentGuides(prev => {
+        if (prev.x === guideX && prev.y === guideY) return prev;
+        return { x: guideX, y: guideY };
       });
-      networkEquipments.forEach(e => {
-        if (Math.abs(snappedX - e.x) < 5) guideX = e.x;
-        if (Math.abs(snappedY - e.y) < 5) guideY = e.y;
-      });
 
-      setAlignmentGuides({ x: guideX, y: guideY });
-
-      setCables((prev) =>
-        prev.map((c) => (c.id === draggingCableId ? { ...c, x: guideX ?? snappedX, y: guideY ?? snappedY } : c))
-      );
-    }
-
-    if (draggingEquipId) {
-      const rx = (e.clientX - rect.left - pan.x) / scale - dragOffset.x;
-      const ry = (e.clientY - rect.top - pan.y) / scale - dragOffset.y;
-      
-      // Snap to grid (20px)
-      const snappedX = Math.round(rx / 20) * 20;
-      const snappedY = Math.round(ry / 20) * 20;
-
-      // Detection for alignment guides
-      let guideX: number | null = null;
-      let guideY: number | null = null;
-
-      cables.forEach(c => {
-        if (Math.abs(snappedX - c.x) < 5) guideX = c.x;
-        if (Math.abs(snappedY - c.y) < 5) guideY = c.y;
-      });
-      networkEquipments.forEach(e => {
-        if (e.id === draggingEquipId) return;
-        if (Math.abs(snappedX - e.x) < 5) guideX = e.x;
-        if (Math.abs(snappedY - e.y) < 5) guideY = e.y;
-      });
-
-      setAlignmentGuides({ x: guideX, y: guideY });
-
-      setNetworkEquipments((prev) =>
-        prev.map((e) => (e.id === draggingEquipId ? { ...e, x: guideX ?? snappedX, y: guideY ?? snappedY } : e))
-      );
+      if (draggingCableId) {
+        setCables(prev => prev.map(c => c.id === draggingCableId ? { ...c, x: guideX ?? snappedX, y: guideY ?? snappedY } : c));
+      } else {
+        setNetworkEquipments(prev => prev.map(e => e.id === draggingEquipId ? { ...e, x: guideX ?? snappedX, y: guideY ?? snappedY } : e));
+      }
     }
 
     if (draggingLine) {
@@ -292,7 +366,11 @@ export default function App() {
 
       setGlowTarget(targetRef);
       setGlowIntensity(intensity);
-      setDraggingLine(prev => prev ? { ...prev, toX: finalToX, toY: finalToY } : null);
+      setDraggingLine(prev => {
+        if (!prev) return null;
+        if (prev.toX === finalToX && prev.toY === finalToY) return prev;
+        return { ...prev, toX: finalToX, toY: finalToY };
+      });
     }
   }, [isPanning, draggingCableId, draggingEquipId, pan, scale, dragOffset, draggingLine, cables, networkEquipments, selectionBox, tool, getNodeWorldPos]);
 
@@ -351,14 +429,6 @@ export default function App() {
     setScale(ns);
   };
 
-  const zoomIn = () => {
-    const ns = Math.min(4, scale * 1.2);
-    setScale(ns);
-  };
-  const zoomOut = () => {
-    const ns = Math.max(0.1, scale / 1.2);
-    setScale(ns);
-  };
   const resetView = () => {
     setPan({ x: window.innerWidth / 2 - 250, y: window.innerHeight / 2 - 100 });
     setScale(1);
@@ -437,10 +507,14 @@ export default function App() {
     // Add export mode class to trigger dark on white styles
     world.classList.add('export-mode');
     
-    // Sync input values to DOM attributes so html-to-image captures them
-    const inputs = world.querySelectorAll('input');
+    // Sync input/textarea values to DOM attributes so html-to-image captures them
+    const inputs = world.querySelectorAll('input, textarea');
     inputs.forEach(input => {
-      input.setAttribute('value', (input as HTMLInputElement).value);
+      if (input.tagName.toLowerCase() === 'textarea') {
+        input.textContent = (input as HTMLTextAreaElement).value;
+      } else {
+        input.setAttribute('value', (input as HTMLInputElement).value);
+      }
     });
     
     try {
@@ -788,236 +862,258 @@ export default function App() {
 
   return (
     <div className={`h-screen w-screen relative flex flex-col overflow-hidden transition-colors duration-500 ${tool === 'analysis' ? 'bg-[#0a2fd1]' : 'bg-[var(--bg)]'} futuristic-grid`}>
-      <header className="fixed top-0 left-0 right-0 h-16 bg-[#0a0c12]/95 backdrop-blur-3xl border-b border-white/5 z-[100] flex items-center px-4 gap-4">
-        <div className="flex items-center gap-3 shrink-0">
-          <div className="w-10 h-10 bg-linear-to-br from-[#00d2ff] to-[#0088ff] rounded-xl flex items-center justify-center shadow-[0_0_30px_rgba(0,210,255,0.2)]">
-            <Cable className="w-6 h-6 text-[#0a0c12] stroke-[2.5]" />
+      {/* PROFESSIONAL DUAL-AXIS UI */}
+      
+      {/* 1. Header (Primary Metadata & Global Actions) */}
+      <header className="fixed top-0 left-0 right-0 z-[100] flex flex-col shadow-2xl">
+        {/* Row 1: Workspace Identity & Sync */}
+        <div className="h-14 bg-[#0a0c12]/98 backdrop-blur-3xl border-b border-white/5 flex items-center px-6 justify-between">
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-linear-to-br from-[#00d2ff] to-[#0088ff] rounded-xl flex items-center justify-center shadow-[0_0_25px_rgba(0,210,255,0.3)]">
+                <Cable className="w-5 h-5 text-[#0a0c12] stroke-[2.5]" />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[0.45rem] font-black text-[var(--accent)] tracking-[4px] uppercase leading-none mb-1">PRO SCHEMATIC HUB</span>
+                <input 
+                  type="text" 
+                  value={projectName}
+                  onChange={(e) => setProjectName(e.target.value)}
+                  className="project-input w-64 text-sm"
+                  spellCheck={false}
+                />
+              </div>
+            </div>
+
+            <div className="h-8 w-px bg-white/5 mx-2" />
+
+            <div className="flex items-center gap-1 group">
+              <button onClick={() => setShowProjectList(true)} className="icon-btn-refined px-3" title="Open Project">
+                <Folder size={15} className="text-[var(--accent)]" />
+                <span className="text-[0.55rem] font-bold uppercase tracking-[2px] hidden lg:inline">Workspaces</span>
+              </button>
+              <button onClick={() => saveToCloud(true)} className="icon-btn-refined px-3" title="Save As New">
+                <Copy size={14} />
+                <span className="text-[0.55rem] font-bold uppercase tracking-[2px] hidden lg:inline text-white/40 group-hover:text-white transition-colors">Duplicate</span>
+              </button>
+            </div>
           </div>
-          <div className="flex flex-col">
-            <input 
-              type="text" 
-              value={projectName}
-              onChange={(e) => setProjectName(e.target.value)}
-              className="text-white font-black tracking-tight text-sm leading-tight bg-transparent border-b border-transparent hover:border-white/20 focus:border-[var(--accent)] outline-none transition-all w-40"
-              spellCheck={false}
-            />
-            <span className="text-[0.45rem] font-mono text-white/30 tracking-[4px] uppercase mt-0.5">FIBER HUB v2.0</span>
-          </div>
-        </div>
-        
-        <div className="h-10 w-[2px] bg-white/10 shrink-0 mx-2" />
 
-        <div className="flex items-center gap-1 shrink-0">
-          <button 
-            onClick={() => setShowProjectList(true)}
-            className="p-2 py-1.5 hover:bg-white/5 rounded-lg text-white/50 hover:text-white transition-all flex items-center gap-2 border border-transparent hover:border-white/10"
-            title="Open Project"
-          >
-            <Folder size={16} className="text-[var(--accent)]" />
-            <span className="text-[0.55rem] font-bold hidden md:inline uppercase tracking-widest">Open</span>
-          </button>
-          <button 
-            onClick={() => saveToCloud(true)}
-            className="p-2 py-1.5 hover:bg-white/5 rounded-lg text-white/50 hover:text-white transition-all flex items-center gap-2 border border-transparent hover:border-white/10"
-            title="Save As"
-          >
-            <Copy size={16} />
-            <span className="text-[0.55rem] font-bold hidden md:inline uppercase tracking-widest">Save As</span>
-          </button>
-        </div>
+          <div className="flex items-center gap-4">
+            <div className={`flex items-center gap-2.5 px-4 py-1.5 rounded-full border transition-all ${isSaving ? 'bg-orange-500/10 border-orange-500/30' : 'bg-green-500/5 border-green-500/20'}`}>
+              <div className={`w-1.5 h-1.5 rounded-full ${isSaving ? 'bg-orange-500 animate-pulse' : 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]'}`} />
+              <span className="text-[0.55rem] font-mono text-white/50 uppercase tracking-widest font-bold">
+                {isSaving ? 'Relaying to Cloud...' : 'Encrypted & Synced'}
+              </span>
+            </div>
 
-        <div className="h-6 w-[1px] bg-white/10 shrink-0 mx-2" />
+            <div className="h-6 w-px bg-white/5 mx-1" />
 
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar flex-1 py-1">
-          {/* Main Controls */}
-          <div className="flex bg-white/5 p-1 rounded-xl border border-white/10 shrink-0">
-            {[
-              { id: 'select', icon: MousePointer2, label: 'SELECT' },
-              { id: 'analysis', icon: Share2, label: 'TRACE' },
-              { id: 'workzone', icon: Square, label: 'ZONE' },
-            ].map(t => (
+            {user ? (
+              <div className="flex items-center gap-3">
+                <div className="flex flex-col items-end">
+                  <span className="text-[0.6rem] font-bold text-white tracking-tight leading-none">{user.displayName}</span>
+                  <button onClick={() => signOut(auth)} className="text-[0.45rem] font-mono text-white/20 hover:text-red-400 transition-colors uppercase tracking-[2px]">Log Out</button>
+                </div>
+                <img src={user.photoURL || ''} referrerPolicy="no-referrer" className="w-8 h-8 rounded-xl border border-white/10 shadow-lg" alt="P" />
+              </div>
+            ) : (
               <button 
-                key={t.id}
+                onClick={() => signInWithPopup(auth, googleProvider)}
+                className="bg-[var(--accent)] text-[#0a0c12] px-5 py-2 rounded-xl text-[0.65rem] font-black uppercase tracking-[2px] hover:brightness-110 transition-all active:scale-95"
+              >
+                Sign In
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Row 2: Secondary Features & Export Suite */}
+        <div className="h-12 bg-[#0d1017]/96 backdrop-blur-3xl border-b border-white/5 flex items-center px-6 justify-between">
+          <div className="flex items-center gap-4">
+            <div className="ribbon-group">
+              <button 
+                onClick={() => setShowCircuitList(!showCircuitList)}
+                className={`flex items-center gap-2.5 px-4 py-1.5 rounded-lg transition-all ${showCircuitList ? 'bg-[var(--accent)] text-[#0a0c12] font-black' : 'text-white/40 hover:text-white hover:bg-white/5'}`}
+              >
+                <Database size={14} className={showCircuitList ? 'text-[#0a0c12]' : 'text-[var(--accent)]'} />
+                <span className="text-[0.55rem] font-bold uppercase tracking-[2px]">Circuit Database</span>
+              </button>
+            </div>
+            
+            <div className="h-4 w-px bg-white/10" />
+            
+            <div className="flex items-center gap-1">
+              <button className="icon-btn-refined"><Layers size={13} /><span className="hidden xl:inline text-[0.55rem] font-bold tracking-widest uppercase">Layer Opts</span></button>
+              <button className="icon-btn-refined"><Settings size={13} /><span className="hidden xl:inline text-[0.55rem] font-bold tracking-widest uppercase">Automation</span></button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-[0.5rem] font-mono text-white/20 uppercase tracking-[3px] mr-2">Export Protocol</span>
+            <div className="ribbon-group">
+              <button onClick={handleDownload} className="export-btn" title="Raster Overlay"><ImageIcon size={14} /></button>
+              <button onClick={handleSVGExport} className="export-btn border-l border-white/5" title="Vector (Visio/CAD)"><BoxSelect size={14} /></button>
+              <button onClick={handleDXFExport} className="export-btn border-l border-white/5" title="Engineering DXF"><FileCode size={14} /></button>
+              <button onClick={handlePDFExport} className="export-btn border-l border-white/5" title="Inspection PDF"><Printer size={14} /></button>
+            </div>
+            <button 
+              onClick={() => { if(confirm("Permanently wipe current workspace?")) { setConnections([]); setCables([]); setNetworkEquipments([]); setWorkZones([]); } }}
+              className="p-2 hover:bg-red-500/10 rounded-lg text-red-500/30 hover:text-red-500 transition-all ml-4"
+              title="Wipe Current View"
+            >
+              <Trash2 size={16} />
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* 2. Side Toolbar (Interaction & Creation) */}
+      <aside className="fixed left-0 top-[104px] bottom-0 w-20 bg-[#0a0c12]/98 backdrop-blur-3xl border-r border-white/5 z-[100] flex flex-col items-center py-8 gap-10">
+        <div className="flex flex-col items-center gap-4">
+          {[
+            { id: 'select', icon: MousePointer2, label: 'Selection' },
+            { id: 'analysis', icon: Share2, label: 'Circuit Tracer' },
+            { id: 'workzone', icon: Square, label: 'Zone Boundary' },
+          ].map(t => (
+            <div key={t.id} className="relative group">
+              <button 
                 onClick={() => setTool(t.id as any)}
-                className={`px-4 py-2 rounded-lg text-[0.6rem] font-bold tracking-widest uppercase flex items-center gap-2 transition-all ${
-                  tool === t.id 
-                    ? 'bg-[var(--accent)] text-[#0a0c12] shadow-[0_0_15px_rgba(0,210,255,0.4)] scale-105 z-10' 
-                    : 'text-white/40 hover:text-white hover:bg-white/5'
-                }`}
+                className={`sidebar-tool-btn ${tool === t.id ? 'active' : ''}`}
               >
-                <t.icon className="w-3.5 h-3.5" />
-                <span className="hidden xl:inline">{t.label}</span>
-              </button>
-            ))}
-          </div>
-
-          <button 
-            onClick={() => setShowCircuitList(!showCircuitList)}
-            className={`px-4 py-2 rounded-xl text-[0.6rem] font-bold tracking-widest uppercase flex items-center gap-2 transition-all shrink-0 ${
-              showCircuitList 
-                ? 'bg-[var(--accent)] text-[#0a0c12]' 
-                : 'bg-white/5 border border-white/10 text-white/40 hover:text-white hover:bg-white/10'
-            }`}
-          >
-            <Database className="w-3.5 h-3.5" />
-            <span className="hidden xl:inline">DATABASE</span>
-          </button>
-
-          <div className="h-6 w-[1px] bg-white/5 shrink-0" />
-
-          {/* Create Objects */}
-          <div className="flex items-center gap-3 shrink-0">
-            <div className="flex items-center bg-white/10 rounded-xl border border-white/20 overflow-hidden shadow-2xl">
-              <div className="px-3 py-1.5 bg-black/40 border-r border-white/10 relative group/sel">
-                <select 
-                  value={selectedCount}
-                  onChange={(e) => setSelectedCount(parseInt(e.target.value))}
-                  className="bg-transparent text-[rgba(0,210,255,1)] font-mono text-[0.7rem] outline-none cursor-pointer appearance-none text-center min-w-[4.5rem] font-black pr-4"
-                >
-                  {[12, 24, 48, 96, 144, 432].map(count => (
-                    <option key={count} value={count} className="bg-[#0a0c12] text-white">{count}F</option>
-                  ))}
-                </select>
-                <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--accent)] pointer-events-none opacity-50" />
-              </div>
-              <button 
-                onClick={addCable}
-                className="flex items-center gap-2 bg-[var(--accent)] text-[#0a0c12] text-[0.65rem] font-black px-5 py-2.5 transition-all hover:brightness-110 active:scale-95 whitespace-nowrap"
-              >
-                <Plus size={14} className="stroke-[3]" /> CABLE
+                <t.icon size={19} />
+                <div className="sidebar-label">{t.label} Tool</div>
               </button>
             </div>
-
-            <div className="flex items-center bg-white/10 rounded-xl border border-white/20 overflow-hidden shadow-2xl">
-              <div className="flex flex-col border-r border-white/10 bg-black/40">
-                <div className="flex items-center gap-1.5 px-2 py-0.5 border-b border-white/5">
-                  <span className="text-[0.45rem] font-bold text-white/30 uppercase">Type:</span>
-                  <input 
-                    type="text"
-                    value={equipmentType}
-                    onChange={(e) => setEquipmentType(e.target.value)}
-                    className="bg-transparent text-white font-mono text-[0.6rem] outline-none w-20 px-1"
-                  />
-                </div>
-                <div className="flex items-center gap-1.5 px-2 py-0.5">
-                  <span className="text-[0.45rem] font-bold text-white/30 uppercase">Bldg:</span>
-                  <input 
-                    type="text"
-                    value={equipmentBuilding}
-                    onChange={(e) => setEquipmentBuilding(e.target.value)}
-                    className="bg-transparent text-white font-mono text-[0.6rem] outline-none w-20 px-1"
-                  />
-                </div>
-              </div>
-              <div className="px-3 py-1.5 bg-black/40 border-r border-white/10 relative group/port self-stretch flex items-center">
-                <select 
-                  value={selectedPortCount}
-                  onChange={(e) => setSelectedPortCount(parseInt(e.target.value))}
-                  className="bg-transparent text-[#a78bfa] font-mono text-[0.7rem] outline-none cursor-pointer appearance-none text-center min-w-[3.5rem] font-black pr-4"
-                >
-                  {[1, 2, 4, 6, 8, 12, 16, 24, 48, 96].map(count => (
-                    <option key={count} value={count} className="bg-[#0a0c12] text-white">{count}P</option>
-                  ))}
-                </select>
-                <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-[#a78bfa] pointer-events-none opacity-50" />
-              </div>
-              <button 
-                onClick={addNetworkEquipment}
-                className="flex items-center gap-2 bg-[#8b5cf6] text-white text-[0.65rem] font-black px-5 py-2.5 transition-all hover:bg-[#9d72f9] active:scale-95 whitespace-nowrap self-stretch"
-              >
-                <Plus size={14} className="stroke-[3]" /> EQUIP
-              </button>
-            </div>
-          </div>
+          ))}
         </div>
 
-        {/* Export Group */}
-        <div className="flex items-center gap-2 ml-auto shrink-0 pr-2">
-          <div className="flex bg-white/5 p-1 rounded-xl border border-white/10">
-            <button 
-              title={user ? (isSaving ? "Saving..." : "Save Status") : "Login to Save"}
-              onClick={() => saveToCloud(false)}
-              disabled={isSaving}
-              className={`p-2 rounded-lg transition-all flex items-center gap-2 ${
-                user 
-                  ? 'text-[var(--accent)] hover:bg-[var(--accent)]/10' 
-                  : 'text-white/40 hover:text-white hover:bg-white/10'
-              }`}
-            >
-              <Zap size={18} className={isSaving ? 'animate-spin' : ''} />
-              {user && <span className="text-[0.6rem] font-bold hidden lg:inline">{isSaving ? 'SAVING...' : 'SAVE'}</span>}
-            </button>
-            <div className="w-[1px] h-4 bg-white/10 mx-1 self-center" />
-            <button 
-              title="Export Image"
-              onClick={handleDownload}
-              className="p-2 hover:bg-white/10 rounded-lg text-white/40 hover:text-white transition-all"
-            >
-              <ImageIcon size={18} />
-            </button>
-            <button 
-              title="Export SVG (Vector/Visio)"
-              onClick={handleSVGExport}
-              className="p-2 hover:bg-white/10 rounded-lg text-white/40 hover:text-white transition-all border-l border-white/5"
-            >
-              <BoxSelect size={18} />
-            </button>
-            <button 
-              title="Export DXF (AutoCAD)"
-              onClick={handleDXFExport}
-              className="p-2 hover:bg-white/10 rounded-lg text-white/40 hover:text-white transition-all border-l border-white/5"
-            >
-              <FileCode size={18} />
-            </button>
-            <button 
-              title="Export PDF"
-              onClick={handlePDFExport}
-              className="p-2 hover:bg-white/10 rounded-lg text-white/40 hover:text-white transition-all border-l border-white/5"
-            >
-              <FileType size={18} />
-            </button>
-          </div>
+        <div className="w-10 h-px bg-white/5" />
+
+        <div className="flex flex-col items-center gap-5">
           
-          <button 
-            onClick={() => { if(confirm("Erase all schematic data?")) { setConnections([]); setCables([]); setNetworkEquipments([]); setWorkZones([]); } }}
-            className="p-3 hover:bg-red-500/10 rounded-xl text-red-500/40 hover:text-red-500 transition-all ml-2"
-            title="Wipe Project"
+          {/* Cable Entry Menu */}
+          <div 
+            className="relative"
+            onMouseEnter={() => handleMenuEnter('cable')}
+            onMouseLeave={handleMenuLeave}
           >
-            <Trash2 size={18} />
-          </button>
-        {/* User Info / Auth */}
-        <div className="flex items-center gap-3 pl-2 ml-2 border-l border-white/5">
-          {user ? (
-            <div className="flex items-center gap-2">
-              <div className="flex flex-col items-end hidden md:flex">
-                <span className="text-[0.6rem] font-bold text-white leading-none">{user.displayName}</span>
-                <button 
-                  onClick={() => signOut(auth)}
-                  className="text-[0.5rem] font-mono text-white/30 hover:text-[var(--accent)] transition-all uppercase tracking-widest"
-                >
-                  SIGNOUT
-                </button>
-              </div>
-              <img 
-                src={user.photoURL || ''} 
-                className="w-8 h-8 rounded-lg border border-white/10" 
-                referrerPolicy="no-referrer"
-                alt="user"
-              />
-            </div>
-          ) : (
             <button 
-              onClick={() => signInWithPopup(auth, googleProvider)}
-              className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-[0.6rem] font-bold text-white/60 hover:text-white hover:bg-white/10 transition-all uppercase tracking-widest"
+              onClick={() => { addCable(); setOpenMenu(null); }}
+              className="w-12 h-12 bg-[var(--accent)] text-[#0a0c12] rounded-2xl flex items-center justify-center shadow-[0_0_20px_rgba(0,210,255,0.4)] hover:scale-105 active:scale-95 transition-all z-20"
             >
-              SIGN IN
+              <Plus size={22} className="stroke-[3]" />
+              <div className="sidebar-label text-white">Assemble Cable Trunk</div>
             </button>
-          )}
+            
+            <AnimatePresence>
+              {openMenu === 'cable' && (
+                <motion.div 
+                  initial={{ opacity: 0, x: 10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 10 }}
+                  className="absolute left-[64px] top-0 z-[200] pl-4"
+                >
+                  <div className="bg-[#0f121a]/95 backdrop-blur-2xl border border-white/10 p-4 rounded-2xl shadow-3xl flex flex-col gap-3 min-w-[220px]">
+                    <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                      <span className="text-[0.45rem] font-black text-white/40 uppercase tracking-[3px]">Trunk Density</span>
+                      <span className="text-[0.55rem] font-black text-[var(--accent)] font-mono">{selectedCount}F</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[12, 24, 48, 96, 144, 432].map(count => (
+                        <button 
+                          key={count} 
+                          onClick={(e) => { e.stopPropagation(); setSelectedCount(count); }}
+                          className={`py-2 rounded-xl text-[0.65rem] font-mono border transition-all ${selectedCount === count ? 'bg-[var(--accent)] text-[#0a0c12] border-[var(--accent)] font-black' : 'bg-white/5 border-white/10 text-white/30 hover:text-white hover:bg-white/10'}`}
+                        >
+                          {count}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          <div 
+            className="relative"
+            onMouseEnter={() => handleMenuEnter('equip')}
+            onMouseLeave={handleMenuLeave}
+          >
+            <button 
+              onClick={() => { addNetworkEquipment(); setOpenMenu(null); }}
+              className="w-12 h-12 bg-indigo-600 text-white rounded-2xl flex items-center justify-center shadow-[0_0_25px_rgba(79,70,229,0.3)] hover:scale-105 active:scale-95 transition-all z-20"
+            >
+              <Server size={22} />
+              <div className="sidebar-label">Install Hardware Node</div>
+            </button>
+            <AnimatePresence>
+              {openMenu === 'equip' && (
+                <motion.div 
+                  initial={{ opacity: 0, x: 10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 10 }}
+                  className="absolute left-[64px] top-[-80px] z-[200] pl-4"
+                >
+                  <div className="bg-[#0f121a]/95 backdrop-blur-2xl border border-white/10 p-5 rounded-3xl shadow-3xl flex flex-col gap-4 min-w-[240px]">
+                    <div className="flex flex-col gap-4">
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[0.4rem] uppercase font-black text-white/20 tracking-widest ml-1">Rack Capacity</label>
+                        <div className="grid grid-cols-4 gap-1.5">
+                          {[12, 16, 24, 48, 96].map(count => (
+                            <button 
+                              key={count} 
+                              onClick={(e) => { e.stopPropagation(); setSelectedPortCount(count); }}
+                              className={`py-2 rounded-xl text-[0.6rem] font-mono border transition-all ${selectedPortCount === count ? 'bg-indigo-500 text-white border-indigo-400 font-bold' : 'bg-white/5 border-white/10 text-white/30'}`}
+                            >
+                              {count}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-1.5 flex flex-col">
+                        <label className="text-[0.4rem] uppercase font-black text-white/20 tracking-widest ml-1">Asset Information</label>
+                        <input 
+                          type="text"
+                          value={equipmentType}
+                          onChange={(e) => setEquipmentType(e.target.value)}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-[0.65rem] text-white outline-none focus:border-indigo-400 font-mono transition-all placeholder:text-white/10"
+                          placeholder="Interface Type..."
+                        />
+                        <input 
+                          type="text"
+                          value={equipmentBuilding}
+                          onChange={(e) => setEquipmentBuilding(e.target.value)}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-[0.65rem] text-white outline-none focus:border-indigo-400 font-mono transition-all placeholder:text-white/10"
+                          placeholder="Building Code..."
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
-      </div>
-    </header>
 
+        <div className="mt-auto pb-8 flex flex-col items-center gap-2">
+           <button 
+             onClick={() => resetView()}
+             className="sidebar-tool-btn"
+             title="Recenter"
+           >
+             <Maximize size={20} />
+             <div className="sidebar-label">Relens View</div>
+           </button>
+           <span className="text-[0.55rem] font-mono text-white/20 select-none">{Math.round(scale * 100)}%</span>
+        </div>
+      </aside>
 
+      {/* 3. Main Design Canvas (View Container) */}
       <Tooltip {...tooltip} />
 
       <ProjectList 
@@ -1049,10 +1145,10 @@ export default function App() {
 
       <div 
         ref={containerRef}
-        className={`flex-1 relative overflow-hidden ${
+        className={`flex-1 relative overflow-hidden transition-all duration-300 mt-[104px] ml-20 ${
           tool === 'select' 
             ? 'cursor-crosshair' 
-            : tool === 'trace' 
+            : tool === 'analysis' 
             ? 'cursor-pointer' 
             : 'cursor-cell'
         }`}
@@ -1075,7 +1171,11 @@ export default function App() {
           {selectionBox && (
             <div 
               className={`absolute border pointer-events-none z-[1000] selection-box-overlay ${
-                tool === 'workzone' ? 'border-[var(--accent)] bg-[var(--accent)]/10' : 'border-[#3b82f6] bg-[#3b82f6]/10'
+                tool === 'workzone' 
+                  ? 'border-[var(--accent)] bg-[var(--accent)]/10' 
+                  : tool === 'analysis' 
+                  ? 'border-[#a3ff00] bg-[#a3ff00]/10'
+                  : 'border-[#3b82f6] bg-[#3b82f6]/10'
               }`}
               style={{
                 left: Math.min(selectionBox.start.x, selectionBox.end.x),
@@ -1092,18 +1192,20 @@ export default function App() {
               <line 
                 x1={alignmentGuides.x} y1="-10000" 
                 x2={alignmentGuides.x} y2="10000" 
-                stroke="rgba(0, 210, 255, 0.4)" 
-                strokeWidth="1" 
+                stroke="#f59e0b" 
+                strokeWidth="2" 
                 strokeDasharray="4 4" 
+                style={{ filter: 'drop-shadow(0 0 4px rgba(245, 158, 11, 0.8))' }}
               />
             )}
             {alignmentGuides.y !== null && (
               <line 
                 x1="-10000" y1={alignmentGuides.y} 
                 x2="10000" y2={alignmentGuides.y} 
-                stroke="rgba(0, 210, 255, 0.4)" 
-                strokeWidth="1" 
+                stroke="#f59e0b" 
+                strokeWidth="2" 
                 strokeDasharray="4 4" 
+                style={{ filter: 'drop-shadow(0 0 4px rgba(245, 158, 11, 0.8))' }}
               />
             )}
           </svg>
@@ -1112,7 +1214,7 @@ export default function App() {
           {workZones.map(zone => (
             <div 
               key={zone.id}
-              className="absolute border-2 border-dashed border-white/20 bg-white/[0.02] rounded-lg group"
+              className="absolute border-2 border-dashed border-white/20 bg-white/[0.02] rounded-lg group pointer-events-none"
               style={{
                 left: zone.x,
                 top: zone.y,
@@ -1120,7 +1222,7 @@ export default function App() {
                 height: zone.height,
               }}
             >
-              <div className="absolute -top-8 left-0 flex items-start gap-3 max-w-[400px]">
+              <div className="absolute -top-8 left-0 flex items-start gap-3 max-w-[400px] pointer-events-auto">
                 <div className="bg-white/10 backdrop-blur-sm border border-white/10 px-2 py-1.5 rounded text-[0.7rem] font-mono text-white/90 shadow-xl flex items-start gap-2">
                   <Square size={10} className="text-[var(--accent)] mt-0.5 shrink-0" />
                   <div className="flex flex-col gap-0.5 min-w-0">
@@ -1139,8 +1241,8 @@ export default function App() {
           ))}
 
           {/* Connections Layer */}
-          <svg className="absolute inset-0 w-[10000px] h-[10000px] -translate-x-[5000px] -translate-y-[5000px] pointer-events-none">
-            <g transform="translate(5000, 5000)" className="pointer-events-auto">
+          <svg className="absolute inset-0 pointer-events-none overflow-visible z-30">
+            <g className="pointer-events-none">
               {connections.map(conn => {
                 const p1 = getNodeWorldPos(conn.from);
                 const p2 = getNodeWorldPos(conn.to);
@@ -1184,21 +1286,29 @@ export default function App() {
                       }
                     }}
                   >
-                    {/* Hit area */}
                     <path 
                       d={`M${p1.x},${p1.y} C${cp1x},${p1.y} ${cp2x},${p2.y} ${p2.x},${p2.y}`}
                       stroke="transparent"
                       strokeWidth="15"
                       fill="none"
-                      className="pointer-events-auto"
+                      className={tool === 'analysis' ? 'pointer-events-auto' : 'pointer-events-none'}
                     />
+                    {isInspected && (
+                      <path 
+                        d={`M${p1.x},${p1.y} C${cp1x},${p1.y} ${cp2x},${p2.y} ${p2.x},${p2.y}`}
+                        stroke="#a3ff00"
+                        strokeWidth="6"
+                        fill="none"
+                        className="opacity-50 blur-[2px]"
+                      />
+                    )}
                     <path 
                       d={`M${p1.x},${p1.y} C${cp1x},${p1.y} ${cp2x},${p2.y} ${p2.x},${p2.y}`}
-                      stroke={tubeColor}
+                      stroke={isInspected ? "#a3ff00" : tubeColor}
                       strokeWidth={isInspected ? "4" : "2.5"}
                       fill="none"
                       strokeOpacity={isInspected ? "1" : "0.8"}
-                      className="drop-shadow-[0_0_5px_rgba(255,255,255,0.2)] transition-all"
+                      className={`drop-shadow-[0_0_5px_rgba(255,255,255,0.2)] transition-all ${isInspected ? 'animate-pulse' : ''}`}
                     />
                     {conn.circuitName && (
                       <g className="pointer-events-none">
@@ -1238,18 +1348,10 @@ export default function App() {
                         <line 
                           key={`trace-internal-${cable.id}-${ti}-${si}`}
                           x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
-                          stroke="#ff3b3b"
-                          strokeWidth="3.5"
-                          strokeDasharray="12,6"
-                          className="drop-shadow-[0_0_15px_rgba(255,59,59,0.5)] opacity-80"
-                        >
-                          <animate 
-                            attributeName="stroke-dashoffset" 
-                            from="100" to="0" 
-                            dur="5s" 
-                            repeatCount="indefinite" 
-                          />
-                        </line>
+                          stroke="#a3ff00"
+                          strokeWidth="4"
+                          className="drop-shadow-[0_0_15px_rgba(163,255,0,0.6)] opacity-90"
+                        />
                       );
                     })
                   );
@@ -1361,22 +1463,6 @@ export default function App() {
               }}
             />
           ))}
-        </div>
-
-        <div className="fixed bottom-15 left-5 flex flex-col gap-1 z-[200]">
-          <div className="bg-[var(--panel2)] border border-[var(--border)] rounded px-2 py-1 mb-1 shadow-md">
-             <div className="font-mono text-[0.55rem] text-[var(--text-dim)] flex flex-col gap-0.5">
-               <span>X: {mousePos.x}</span>
-               <span>Y: {mousePos.y}</span>
-             </div>
-          </div>
-          <button onClick={zoomIn} className="w-8 h-8 bg-[var(--panel2)] border border-[var(--border)] rounded text-[var(--text)] hover:border-[var(--accent)] shadow-md flex items-center justify-center transition-all active:scale-90">
-            <ZoomIn size={16} />
-          </button>
-          <button onClick={zoomOut} className="w-8 h-8 bg-[var(--panel2)] border border-[var(--border)] rounded text-[var(--text)] hover:border-[var(--accent)] shadow-md flex items-center justify-center transition-all active:scale-90">
-            <ZoomOut size={16} />
-          </button>
-          <div className="font-mono text-[0.6rem] text-[var(--text-dim)] text-center mt-0.5">{Math.round(scale * 100)}%</div>
         </div>
 
         <AnimatePresence>

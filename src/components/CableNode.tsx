@@ -47,15 +47,19 @@ export const CableNode: React.FC<CableNodeProps> = ({
   useEffect(() => {
     const lH = leftRef.current?.offsetHeight || 0;
     const rH = rightRef.current?.offsetHeight || 0;
-    setLeftHeight(lH);
-    setRightHeight(rH);
-    setTrunkHeight(Math.max(lH, rH, 80));
+    
+    setLeftHeight(prev => prev !== lH ? lH : prev);
+    setRightHeight(prev => prev !== rH ? rH : prev);
+    setTrunkHeight(prev => {
+      const next = Math.max(lH, rH, 140);
+      return prev !== next ? next : prev;
+    });
   }, [cable.leftExp, cable.rightExp, cable.tubes.length]);
 
   return (
     <div
       ref={nodeRef}
-      className="absolute flex items-start select-none group"
+      className="absolute flex items-start select-none group z-20"
       style={{
         left: cable.x,
         top: cable.y,
@@ -64,7 +68,7 @@ export const CableNode: React.FC<CableNodeProps> = ({
       {/* Delete Button */}
       <button
         onClick={() => onDelete(cable.id)}
-        className="absolute -top-2.5 -right-2.5 w-6 h-6 bg-red-600 border border-red-400 rounded-full text-white flex items-center justify-center cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity z-50 hover:bg-red-500"
+        className="absolute -top-2.5 -right-2.5 w-6 h-6 bg-red-600 border border-red-400 rounded-full text-white flex items-center justify-center cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity z-50 hover:bg-red-500 pointer-events-auto"
       >
         <X size={12} strokeWidth={3} />
       </button>
@@ -97,22 +101,49 @@ export const CableNode: React.FC<CableNodeProps> = ({
       {/* Trunk */}
       <div
         onMouseDown={(e) => onDragStart(e, cable.id)}
-        className="cable-trunk bg-linear-to-b from-[#2a2a2a] via-[#111] to-[#222] border-2 border-[#333] rounded-xl relative flex flex-col items-center justify-center shadow-[inset_0_2px_4px_rgba(255,255,255,0.07),inset_0_-2px_4px_rgba(0,0,0,0.5),0_4px_15px_rgba(0,0,0,0.6)] px-4 min-w-[160px] cursor-grab active:cursor-grabbing mx-0 z-10 shrink-0"
+        className="cable-trunk bg-linear-to-b from-[#2a2a2a] via-[#111] to-[#222] border-2 border-[#333] rounded-xl relative flex flex-col items-center justify-center shadow-[inset_0_2px_4px_rgba(255,255,255,0.07),inset_0_-2px_4px_rgba(0,0,0,0.5),0_4px_15px_rgba(0,0,0,0.6)] px-4 min-w-[160px] cursor-grab active:cursor-grabbing mx-0 z-10 shrink-0 pointer-events-auto"
         style={{ height: trunkHeight }}
       >
         <div className="absolute inset-x-4 inset-y-0 bg-[repeating-linear-gradient(90deg,transparent_0px,transparent_6px,rgba(255,255,255,0.025)_6px,rgba(255,255,255,0.025)_7px)] rounded-lg pointer-events-none" />
-        <div className="relative z-10 font-mono text-[0.65rem] text-[rgba(200,220,255,0.6)] tracking-widest text-center leading-relaxed flex flex-col items-center">
-          <input
-            type="text"
+        <div className="relative z-10 font-mono text-[0.65rem] text-[rgba(200,220,255,0.6)] tracking-widest text-center leading-relaxed flex flex-col items-center w-full">
+          <textarea
             value={cable.name}
             onChange={(e) => onUpdate(cable.id, { name: e.target.value })}
             onMouseDown={(e) => e.stopPropagation()}
             placeholder="Asset Name"
-            className="cable-name-input text-sm text-white block glow-text mb-1 bg-transparent border-b border-transparent outline-none text-center w-full max-w-[120px] transition-all focus:border-[var(--accent)] hover:border-white/20 cursor-text"
+            rows={2}
+            className="cable-name-input text-sm text-white block glow-text mb-1 bg-transparent border-b border-transparent outline-none text-center w-full max-w-[140px] resize-none transition-all focus:border-[var(--accent)] hover:border-white/20 cursor-text overflow-hidden"
           />
-          <strong className="text-[0.6rem] text-[rgba(255,255,255,0.4)] block mb-1 uppercase">{cable.fiberCount}F Trunk</strong>
-          TIA-598-C<br />
-          {cable.tubes.length} TUBE{cable.tubes.length > 1 ? 'S' : ''} × 12
+          <strong className="text-[0.6rem] text-[rgba(255,255,255,0.4)] block mb-1 uppercase tracking-[2px]">{cable.fiberCount}F Trunk</strong>
+          
+          <div className="flex flex-col gap-1 w-full px-2 mt-2 border-t border-white/5 pt-2">
+            <div className="flex items-center gap-1">
+              <span className="text-[0.55rem] font-bold text-white/30 uppercase shrink-0">To:</span>
+              <input
+                type="text"
+                value={cable.to || ''}
+                onChange={(e) => onUpdate(cable.id, { to: e.target.value })}
+                onMouseDown={(e) => e.stopPropagation()}
+                className="bg-transparent border-b border-white/5 focus:border-[var(--accent)] outline-none text-white/70 text-[0.6rem] transition-all w-full font-mono uppercase text-left truncate"
+                placeholder="---"
+              />
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="text-[0.55rem] font-bold text-white/30 uppercase shrink-0">From:</span>
+              <input
+                type="text"
+                value={cable.from || ''}
+                onChange={(e) => onUpdate(cable.id, { from: e.target.value })}
+                onMouseDown={(e) => e.stopPropagation()}
+                className="bg-transparent border-b border-white/5 focus:border-[var(--accent)] outline-none text-white/70 text-[0.6rem] transition-all w-full font-mono uppercase text-left truncate"
+                placeholder="---"
+              />
+            </div>
+          </div>
+
+          <div className="mt-2 text-[0.5rem] opacity-30 tracking-[1px] uppercase">
+            TIA-598-C • {cable.tubes.length} Tube{cable.tubes.length > 1 ? 's' : ''}
+          </div>
         </div>
       </div>
 

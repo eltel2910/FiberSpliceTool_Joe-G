@@ -167,8 +167,7 @@ export const BreakoutSVG: React.FC<BreakoutSVGProps> = ({
                   cy={dotCY} 
                   r={LAYOUT.STRAND_R + 15} 
                   fill="transparent"
-                  className="cursor-pointer fiber-hit-area"
-                  style={{ pointerEvents: 'all' }}
+                  className="cursor-pointer fiber-hit-area pointer-events-auto"
                   onMouseDown={(e) => {
                     e.stopPropagation();
                     onDotMouseDown(e, ref);
@@ -203,7 +202,7 @@ export const BreakoutSVG: React.FC<BreakoutSVGProps> = ({
               width={svgW}
               height={LAYOUT.TUBE_H}
               fill="transparent"
-              className="cursor-pointer"
+              className="cursor-pointer pointer-events-auto"
               onClick={() => onToggleTube(ti)}
             />
             {/* Tube Label */}
@@ -227,7 +226,7 @@ export const BreakoutSVG: React.FC<BreakoutSVGProps> = ({
               fill={`${tube.color.hex}cc`}
               stroke={isExpanded ? '#00c8ff' : 'rgba(255,255,255,0.3)'}
               strokeWidth={isExpanded ? '2' : '1.2'}
-              className="cursor-pointer"
+              className="cursor-pointer pointer-events-auto"
               onClick={() => onToggleTube(ti)}
             />
             {tube.binderColor && (

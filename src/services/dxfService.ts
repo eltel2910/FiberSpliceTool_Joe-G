@@ -103,8 +103,22 @@ export const exportToDXF = (
     drawing.drawLine(cable.x + leftSVGWidth + trunkWidth, getCADY(cable.y), cable.x + leftSVGWidth + trunkWidth, getCADY(cable.y + totalH));
 
     drawing.setActiveLayer('Text');
-    drawing.drawText(cable.x + leftSVGWidth + 10, getCADY(cable.y + 35), 15, 0, cable.name);
-    drawing.drawText(cable.x + leftSVGWidth + 10, getCADY(cable.y + 55), 8, 0, `${cable.fiberCount}F TRUNK`);
+    const nameLines = cable.name.split('\n');
+    nameLines.forEach((line, i) => {
+      drawing.drawText(cable.x + leftSVGWidth + trunkWidth / 2, getCADY(cable.y + 35 + (i * 20)), 15, 0, line);
+    });
+    
+    let labelY = 35 + (nameLines.length * 20);
+    drawing.drawText(cable.x + leftSVGWidth + trunkWidth / 2, getCADY(cable.y + labelY), 8, 0, `${cable.fiberCount}F TRUNK`);
+
+    if (cable.to) {
+      labelY += 15;
+      drawing.drawText(cable.x + leftSVGWidth + trunkWidth / 2, getCADY(cable.y + labelY), 7, 0, `TO: ${cable.to}`);
+    }
+    if (cable.from) {
+      labelY += 12;
+      drawing.drawText(cable.x + leftSVGWidth + trunkWidth / 2, getCADY(cable.y + labelY), 7, 0, `FROM: ${cable.from}`);
+    }
 
     // Draw dots for each side
     ['left', 'right'].forEach(side => {

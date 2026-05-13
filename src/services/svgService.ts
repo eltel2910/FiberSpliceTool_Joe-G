@@ -69,8 +69,22 @@ export const exportToSVG = (
     svgLines.push(`    <line x1="${cable.x + leftSVGWidth + trunkWidth}" y1="${cable.y}" x2="${cable.x + leftSVGWidth + trunkWidth}" y2="${cable.y + totalH}" stroke="#0055aa" stroke-width="1" />`);
 
     // Title
-    svgLines.push(`    <text x="${cable.x + leftSVGWidth + trunkWidth / 2}" y="${cable.y + 35}" fill="#000" font-family="Helvetica" font-size="20" font-weight="bold" text-anchor="middle">${cable.name}</text>`);
-    svgLines.push(`    <text x="${cable.x + leftSVGWidth + trunkWidth / 2}" y="${cable.y + 55}" fill="#666" font-family="Helvetica" font-size="12" text-anchor="middle">${cable.fiberCount}F TRUNK</text>`);
+    const nameLines = cable.name.split('\n');
+    nameLines.forEach((line, i) => {
+      svgLines.push(`    <text x="${cable.x + leftSVGWidth + trunkWidth / 2}" y="${cable.y + 35 + (i * 25)}" fill="#000" font-family="Helvetica" font-size="20" font-weight="bold" text-anchor="middle">${line}</text>`);
+    });
+    
+    let labelY = 35 + (nameLines.length * 25);
+    svgLines.push(`    <text x="${cable.x + leftSVGWidth + trunkWidth / 2}" y="${cable.y + labelY}" fill="#666" font-family="Helvetica" font-size="12" text-anchor="middle">${cable.fiberCount}F TRUNK</text>`);
+    
+    if (cable.to) {
+      labelY += 20;
+      svgLines.push(`    <text x="${cable.x + leftSVGWidth + trunkWidth / 2}" y="${cable.y + labelY}" fill="#0055aa" font-family="Helvetica" font-size="11" font-weight="bold" text-anchor="middle">TO: ${cable.to}</text>`);
+    }
+    if (cable.from) {
+      labelY += 15;
+      svgLines.push(`    <text x="${cable.x + leftSVGWidth + trunkWidth / 2}" y="${cable.y + labelY}" fill="#0055aa" font-family="Helvetica" font-size="11" font-weight="bold" text-anchor="middle">FROM: ${cable.from}</text>`);
+    }
 
     // Side Layouts
     ['left', 'right'].forEach(side => {

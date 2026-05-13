@@ -104,7 +104,8 @@
   border-color: rgba(0, 0, 0, 0.1) !important;
 }
 
-.export-mode input:not(.cable-name-input) {
+.export-mode input:not(.cable-name-input),
+.export-mode textarea:not(.cable-name-input) {
   border: none !important;
   background: transparent !important;
   color: #0f172a !important;
@@ -170,5 +171,34 @@ body {
   to {
     stroke-dashoffset: -16;
   }
+}
+
+/* Redesigned Sidebar and Toolbar styles */
+.sidebar-tool-btn {
+  @apply w-11 h-11 flex items-center justify-center rounded-xl transition-all relative cursor-pointer border border-transparent;
+}
+
+.sidebar-tool-btn.active {
+  @apply bg-[var(--accent)] text-[#0a0c12] shadow-[0_0_20px_rgba(0,210,255,0.4)] border-[var(--accent)];
+}
+
+.sidebar-tool-btn:not(.active) {
+  @apply text-white/40 hover:text-white hover:bg-white/5 hover:border-white/10;
+}
+
+.sidebar-label {
+  @apply absolute left-14 bg-[#0a0c12] border border-white/10 px-3 py-1.5 rounded-lg text-[0.6rem] font-bold tracking-[2px] uppercase opacity-0 pointer-events-none translate-x-[-10px] group-hover:opacity-100 group-hover:translate-x-0 transition-all z-[200] whitespace-nowrap shadow-2xl;
+}
+
+.ribbon-group {
+  @apply flex items-center bg-white/[0.04] border border-white/5 rounded-xl p-1 gap-1;
+}
+
+.icon-btn-refined {
+  @apply p-2 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition-all flex items-center gap-2 border border-transparent hover:border-white/10 disabled:opacity-30 disabled:pointer-events-none;
+}
+
+.nav-link {
+  @apply text-[0.6rem] font-bold tracking-[2px] uppercase transition-all px-3 py-1 rounded-lg;
 }
 

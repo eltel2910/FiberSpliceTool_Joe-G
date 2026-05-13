@@ -89,7 +89,21 @@ export const exportToPDF = (
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
-    doc.text(cable.name, cx + toMM(leftSVGWidth + trunkWidth / 2), cy + 10, { align: 'center' });
+    // Split name in case of newlines
+    const nameLines = doc.splitTextToSize(cable.name, toMM(trunkWidth) - 2);
+    doc.text(nameLines, cx + toMM(leftSVGWidth + trunkWidth / 2), cy + 10, { align: 'center' });
+    
+    // Add TO/FROM if they exist
+    let extraY = 10 + (nameLines.length * 4);
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+    if (cable.to) {
+      doc.text(`TO: ${cable.to}`, cx + toMM(leftSVGWidth + trunkWidth / 2), cy + extraY, { align: 'center' });
+      extraY += 4;
+    }
+    if (cable.from) {
+      doc.text(`FROM: ${cable.from}`, cx + toMM(leftSVGWidth + trunkWidth / 2), cy + extraY, { align: 'center' });
+    }
 
     ['left', 'right'].forEach(side => {
         const isLeft = side === 'left';
