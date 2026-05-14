@@ -31,8 +31,8 @@ export const CircuitTracePanel: React.FC<Props> = ({ startDots, connections, cab
     const c2 = cables.find(c => c.id === conn.to.cableId);
     if (!c1 || !c2) return null;
     
-    const p1 = getDotWorldPos(c1, conn.from);
-    const p2 = getDotWorldPos(c2, conn.to);
+    const p1 = getDotWorldPos(c1, conn.from, connections);
+    const p2 = getDotWorldPos(c2, conn.to, connections);
     const midX = (p1.x + p2.x) / 2;
     const midY = (p1.y + p2.y) / 2;
     
@@ -64,7 +64,7 @@ export const CircuitTracePanel: React.FC<Props> = ({ startDots, connections, cab
     }
     const cab = cables.find(ca => ca.id === ref.cableId);
     if (!cab) return { x: 0, y: 0 };
-    return getDotWorldPos(cab, ref);
+    return getDotWorldPos(cab, ref, connections);
   };
 
   // Internal helper to build segments for a SPECIFIC path

@@ -1,10 +1,11 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { CableData, DotRef } from '../constants';
+import { CableData, DotRef, Connection, LAYOUT } from '../constants';
 import { BreakoutSVG } from './BreakoutSVG';
-import { X } from 'lucide-react';
+import { X, ChevronUp, ChevronDown } from 'lucide-react';
 
 interface CableNodeProps {
   cable: CableData;
+  connections: Connection[];
   scale: number;
   selectedDots: DotRef[];
   selectedAnalysisDots?: DotRef[];
@@ -22,6 +23,7 @@ interface CableNodeProps {
 
 export const CableNode: React.FC<CableNodeProps> = ({
   cable,
+  connections,
   scale,
   selectedDots,
   selectedAnalysisDots = [],
@@ -44,6 +46,19 @@ export const CableNode: React.FC<CableNodeProps> = ({
   const leftRef = useRef<HTMLDivElement>(null);
   const rightRef = useRef<HTMLDivElement>(null);
 
+  const getVisibleTubes = () => {
+    if (!cable.isCollapsed) return cable.tubes;
+    return cable.tubes.filter((_, ti) => {
+      return connections.some(conn => 
+        (conn.from.cableId === cable.id && conn.from.tubeIdx === ti) ||
+        (conn.to.cableId === cable.id && conn.to.tubeIdx === ti)
+      );
+    });
+  };
+
+  const visibleTubes = getVisibleTubes();
+  const hiddenCount = cable.tubes.length - visibleTubes.length;
+
   useEffect(() => {
     const lH = leftRef.current?.offsetHeight || 0;
     const rH = rightRef.current?.offsetHeight || 0;
@@ -51,10 +66,10 @@ export const CableNode: React.FC<CableNodeProps> = ({
     setLeftHeight(prev => prev !== lH ? lH : prev);
     setRightHeight(prev => prev !== rH ? rH : prev);
     setTrunkHeight(prev => {
-      const next = Math.max(lH, rH, 140);
+      const next = Math.max(lH, rH, 180);
       return prev !== next ? next : prev;
     });
-  }, [cable.leftExp, cable.rightExp, cable.tubes.length]);
+  }, [cable.leftExp, cable.rightExp, cable.tubes.length, cable.isCollapsed, connections]);
 
   return (
     <div
@@ -65,19 +80,34 @@ export const CableNode: React.FC<CableNodeProps> = ({
         top: cable.y,
       }}
     >
-      {/* Delete Button */}
-      <button
-        onClick={() => onDelete(cable.id)}
-        className="absolute -top-2.5 -right-2.5 w-6 h-6 bg-red-600 border border-red-400 rounded-full text-white flex items-center justify-center cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity z-50 hover:bg-red-500 pointer-events-auto"
-      >
-        <X size={12} strokeWidth={3} />
-      </button>
+      {/* Top Controls Overlay */}
+      <div className="absolute -top-8 right-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-auto">
+        <button
+          onClick={() => onUpdate(cable.id, { isCollapsed: !cable.isCollapsed })}
+          className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[0.6rem] font-black uppercase tracking-[1px] transition-all ${
+            cable.isCollapsed 
+              ? 'bg-blue-500/20 border-blue-500/40 text-blue-400' 
+              : 'bg-white/5 border-white/10 text-white/40 hover:text-white hover:bg-white/10'
+          }`}
+          title={cable.isCollapsed ? "Expand all tubes" : "Collapse unused tubes"}
+        >
+          {cable.isCollapsed ? <ChevronDown size={10} strokeWidth={3} /> : <ChevronUp size={10} strokeWidth={3} />}
+          {cable.isCollapsed ? "Collapsed" : "Collapse"}
+        </button>
+        
+        <button
+          onClick={() => onDelete(cable.id)}
+          className="w-6 h-6 bg-red-600/80 border border-red-400/50 rounded-full text-white flex items-center justify-center cursor-pointer hover:bg-red-500 transition-colors"
+        >
+          <X size={12} strokeWidth={3} />
+        </button>
+      </div>
 
       {/* Left Breakout */}
       <div ref={leftRef} id={`bo-left-${cable.id}`}>
         <BreakoutSVG
           cableId={cable.id}
-          tubes={cable.tubes}
+          tubes={visibleTubes}
           side="left"
           expandedTubes={cable.leftExp}
           selectedDots={selectedDots}
@@ -101,11 +131,22 @@ export const CableNode: React.FC<CableNodeProps> = ({
       {/* Trunk */}
       <div
         onMouseDown={(e) => onDragStart(e, cable.id)}
-        className="cable-trunk bg-linear-to-b from-[#2a2a2a] via-[#111] to-[#222] border-2 border-[#333] rounded-xl relative flex flex-col items-center justify-center shadow-[inset_0_2px_4px_rgba(255,255,255,0.07),inset_0_-2px_4px_rgba(0,0,0,0.5),0_4px_15px_rgba(0,0,0,0.6)] px-4 min-w-[160px] cursor-grab active:cursor-grabbing mx-0 z-10 shrink-0 pointer-events-auto"
+        className="cable-trunk bg-linear-to-b from-[#1a1a1a] via-[#050505] to-[#121212] border-4 border-black rounded-xl relative flex flex-col items-center justify-start shadow-[inset_0_2px_4px_rgba(255,255,255,0.07),inset_0_-2px_4px_rgba(0,0,0,0.5),0_4px_15px_rgba(0,0,0,0.6)] px-4 min-w-[160px] cursor-grab active:cursor-grabbing mx-0 z-10 shrink-0 pointer-events-auto py-6"
         style={{ height: trunkHeight }}
       >
         <div className="absolute inset-x-4 inset-y-0 bg-[repeating-linear-gradient(90deg,transparent_0px,transparent_6px,rgba(255,255,255,0.025)_6px,rgba(255,255,255,0.025)_7px)] rounded-lg pointer-events-none" />
         <div className="relative z-10 font-mono text-[0.65rem] text-[rgba(200,220,255,0.6)] tracking-widest text-center leading-relaxed flex flex-col items-center w-full">
+          <div className="flex flex-col items-center w-full mb-3 pb-2 border-b border-white/10">
+            <span className="text-[0.55rem] font-black text-[var(--accent)] uppercase tracking-[3px] opacity-70 mb-1">LOCATION</span>
+            <textarea
+              value={cable.location || ''}
+              onChange={(e) => onUpdate(cable.id, { location: e.target.value })}
+              onMouseDown={(e) => e.stopPropagation()}
+              placeholder="Building Name"
+              rows={1}
+              className="text-[1.05rem] font-bold text-white block glow-text bg-transparent border-none outline-none text-center w-full resize-none transition-all focus:text-[var(--accent)] placeholder:text-white/10 cursor-text overflow-hidden leading-tight"
+            />
+          </div>
           <textarea
             value={cable.name}
             onChange={(e) => onUpdate(cable.id, { name: e.target.value })}
@@ -141,8 +182,11 @@ export const CableNode: React.FC<CableNodeProps> = ({
             </div>
           </div>
 
-          <div className="mt-2 text-[0.5rem] opacity-30 tracking-[1px] uppercase">
-            TIA-598-C • {cable.tubes.length} Tube{cable.tubes.length > 1 ? 's' : ''}
+          <div className="mt-2 text-[0.5rem] opacity-30 tracking-[1px] uppercase flex flex-col items-center gap-1">
+            <span>TIA-598-C • {cable.tubes.length} Tube{cable.tubes.length > 1 ? 's' : ''}</span>
+            {cable.isCollapsed && hiddenCount > 0 && (
+              <span className="text-blue-400 font-bold">({hiddenCount} Empty Hidden)</span>
+            )}
           </div>
         </div>
       </div>
@@ -151,7 +195,7 @@ export const CableNode: React.FC<CableNodeProps> = ({
       <div ref={rightRef} id={`bo-right-${cable.id}`}>
         <BreakoutSVG
           cableId={cable.id}
-          tubes={cable.tubes}
+          tubes={visibleTubes}
           side="right"
           expandedTubes={cable.rightExp}
           selectedDots={selectedDots}

@@ -53,7 +53,13 @@ export const exportToSVG = (
     const expandH = LAYOUT.STRAND_PAD_V * 2 + 12 * LAYOUT.STRAND_STEP;
     
     const calculateFullH = (expanded: number[]) => {
-        return LAYOUT.TUBE_PAD + cable.tubes.length * LAYOUT.TUBE_H + (expanded.length * expandH) + LAYOUT.TUBE_PAD;
+        const visibleTubes = cable.tubes.filter((_, ti) => 
+            !cable.isCollapsed || connections.some(c => 
+                (c.from.cableId === cable.id && c.from.tubeIdx === ti) || 
+                (c.to.cableId === cable.id && c.to.tubeIdx === ti)
+            )
+        );
+        return LAYOUT.TUBE_PAD + visibleTubes.length * LAYOUT.TUBE_H + (expanded.length * expandH) + LAYOUT.TUBE_PAD;
     };
     
     const leftH = calculateFullH(cable.leftExp);
@@ -62,19 +68,29 @@ export const exportToSVG = (
     const totalW = leftSVGWidth + trunkWidth + rightSVGWidth;
 
     // Outer Boundary
-    svgLines.push(`    <rect x="${cable.x}" y="${cable.y}" width="${totalW}" height="${totalH}" fill="#f8faff" stroke="#0055aa" stroke-width="2" />`);
+    svgLines.push(`    <rect x="${cable.x}" y="${cable.y}" width="${totalW}" height="${totalH}" fill="#cbd5e1" stroke="#000000" stroke-width="4" />`);
     
     // Partitions
-    svgLines.push(`    <line x1="${cable.x + leftSVGWidth}" y1="${cable.y}" x2="${cable.x + leftSVGWidth}" y2="${cable.y + totalH}" stroke="#0055aa" stroke-width="1" />`);
-    svgLines.push(`    <line x1="${cable.x + leftSVGWidth + trunkWidth}" y1="${cable.y}" x2="${cable.x + leftSVGWidth + trunkWidth}" y2="${cable.y + totalH}" stroke="#0055aa" stroke-width="1" />`);
+    svgLines.push(`    <line x1="${cable.x + leftSVGWidth}" y1="${cable.y}" x2="${cable.x + leftSVGWidth}" y2="${cable.y + totalH}" stroke="#000000" stroke-width="1.5" />`);
+    svgLines.push(`    <line x1="${cable.x + leftSVGWidth + trunkWidth}" y1="${cable.y}" x2="${cable.x + leftSVGWidth + trunkWidth}" y2="${cable.y + totalH}" stroke="#000000" stroke-width="1.5" />`);
 
-    // Title
+    // Location and Title
+    svgLines.push(`    <text x="${cable.x + leftSVGWidth + trunkWidth / 2}" y="${cable.y + 25}" fill="#0055aa" font-family="Helvetica" font-size="12" font-weight="black" text-anchor="middle" opacity="0.6">LOCATION</text>`);
+    
+    const locationLines = (cable.location || '---').split('\n');
+    locationLines.forEach((line, i) => {
+      svgLines.push(`    <text x="${cable.x + leftSVGWidth + trunkWidth / 2}" y="${cable.y + 50 + (i * 25)}" fill="#333" font-family="Helvetica" font-size="22" font-weight="bold" text-anchor="middle">${line}</text>`);
+    });
+
+    let nextY = 50 + (locationLines.length * 25);
+    svgLines.push(`    <line x1="${cable.x + leftSVGWidth + 20}" y1="${cable.y + nextY - 5}" x2="${cable.x + leftSVGWidth + trunkWidth - 20}" y2="${cable.y + nextY - 5}" stroke="#eee" stroke-width="1" />`);
+
     const nameLines = cable.name.split('\n');
     nameLines.forEach((line, i) => {
-      svgLines.push(`    <text x="${cable.x + leftSVGWidth + trunkWidth / 2}" y="${cable.y + 35 + (i * 25)}" fill="#000" font-family="Helvetica" font-size="20" font-weight="bold" text-anchor="middle">${line}</text>`);
+      svgLines.push(`    <text x="${cable.x + leftSVGWidth + trunkWidth / 2}" y="${cable.y + nextY + 25 + (i * 25)}" fill="#000" font-family="Helvetica" font-size="18" font-weight="bold" text-anchor="middle">${line}</text>`);
     });
     
-    let labelY = 35 + (nameLines.length * 25);
+    let labelY = nextY + 25 + (nameLines.length * 25);
     svgLines.push(`    <text x="${cable.x + leftSVGWidth + trunkWidth / 2}" y="${cable.y + labelY}" fill="#666" font-family="Helvetica" font-size="12" text-anchor="middle">${cable.fiberCount}F TRUNK</text>`);
     
     if (cable.to) {
@@ -98,6 +114,12 @@ export const exportToSVG = (
 
         let curY = cable.y + LAYOUT.TUBE_PAD;
         cable.tubes.forEach((tube, ti) => {
+            const isVisible = !cable.isCollapsed || connections.some(c => 
+                (c.from.cableId === cable.id && c.from.tubeIdx === ti) || 
+                (c.to.cableId === cable.id && c.to.tubeIdx === ti)
+            );
+            if (!isVisible) return;
+
             const pillCY = curY + LAYOUT.TUBE_H / 2;
             const absolutePillX = cable.x + sideXOffset + pillX;
             const absolutePillOutX = cable.x + sideXOffset + pillOutX;
@@ -167,7 +189,7 @@ export const exportToSVG = (
         }
         const cab = cables.find(c => c.id === ref.cableId);
         if (!cab) return { x: 0, y: 0 };
-        return getDotWorldPos(cab, ref);
+        return getDotWorldPos(cab, ref, connections);
     };
 
     const p1 = getPos(conn.from);

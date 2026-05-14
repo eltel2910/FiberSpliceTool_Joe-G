@@ -86,7 +86,13 @@ export const exportToDXF = (
     const expandH = LAYOUT.STRAND_PAD_V * 2 + 12 * LAYOUT.STRAND_STEP;
     
     const calculateFullH = (expanded: number[]) => {
-        return LAYOUT.TUBE_PAD + cable.tubes.length * LAYOUT.TUBE_H + (expanded.length * expandH) + LAYOUT.TUBE_PAD;
+        const visibleTubes = cable.tubes.filter((_, ti) => 
+            !cable.isCollapsed || connections.some(c => 
+                (c.from.cableId === cable.id && c.from.tubeIdx === ti) || 
+                (c.to.cableId === cable.id && c.to.tubeIdx === ti)
+            )
+        );
+        return LAYOUT.TUBE_PAD + visibleTubes.length * LAYOUT.TUBE_H + (expanded.length * expandH) + LAYOUT.TUBE_PAD;
     };
     
     const leftH = calculateFullH(cable.leftExp);
@@ -94,21 +100,27 @@ export const exportToDXF = (
     const totalH = Math.max(leftH, rightH, 80);
     const totalW = leftSVGWidth + trunkWidth + rightSVGWidth;
 
-    // Draw full boundary
-    drawBox(cable.x, getCADY(cable.y), cable.x + totalW, getCADY(cable.y + totalH), 'Cables');
+    // Draw cable trunk box
+    drawBox(cable.x + leftSVGWidth, getCADY(cable.y), cable.x + leftSVGWidth + trunkWidth, getCADY(cable.y + totalH), 'Cables');
     
-    // Draw internal partitions
+    // Draw internal partitions removed as they are now the box boundaries
     drawing.setActiveLayer('Cables');
-    drawing.drawLine(cable.x + leftSVGWidth, getCADY(cable.y), cable.x + leftSVGWidth, getCADY(cable.y + totalH));
-    drawing.drawLine(cable.x + leftSVGWidth + trunkWidth, getCADY(cable.y), cable.x + leftSVGWidth + trunkWidth, getCADY(cable.y + totalH));
 
     drawing.setActiveLayer('Text');
+    drawing.drawText(cable.x + leftSVGWidth + trunkWidth / 2, getCADY(cable.y + 15), 6, 0, 'LOCATION');
+    
+    const locationLines = (cable.location || '---').split('\n');
+    locationLines.forEach((line, i) => {
+      drawing.drawText(cable.x + leftSVGWidth + trunkWidth / 2, getCADY(cable.y + 25 + (i * 15)), 12, 0, line);
+    });
+
+    let nextY = 25 + (locationLines.length * 15);
     const nameLines = cable.name.split('\n');
     nameLines.forEach((line, i) => {
-      drawing.drawText(cable.x + leftSVGWidth + trunkWidth / 2, getCADY(cable.y + 35 + (i * 20)), 15, 0, line);
+      drawing.drawText(cable.x + leftSVGWidth + trunkWidth / 2, getCADY(cable.y + nextY + 15 + (i * 15)), 10, 0, line);
     });
     
-    let labelY = 35 + (nameLines.length * 20);
+    let labelY = nextY + 15 + (nameLines.length * 15);
     drawing.drawText(cable.x + leftSVGWidth + trunkWidth / 2, getCADY(cable.y + labelY), 8, 0, `${cable.fiberCount}F TRUNK`);
 
     if (cable.to) {
@@ -132,6 +144,12 @@ export const exportToDXF = (
 
         let curY = cable.y + LAYOUT.TUBE_PAD;
         cable.tubes.forEach((tube, ti) => {
+            const isVisible = !cable.isCollapsed || connections.some(c => 
+                (c.from.cableId === cable.id && c.from.tubeIdx === ti) || 
+                (c.to.cableId === cable.id && c.to.tubeIdx === ti)
+            );
+            if (!isVisible) return;
+
             const pillCY = curY + LAYOUT.TUBE_H / 2;
             const absolutePillX = cable.x + sideXOffset + pillX;
             const absolutePillOutX = cable.x + sideXOffset + pillOutX;
@@ -205,7 +223,7 @@ export const exportToDXF = (
         }
         const cab = cables.find(c => c.id === ref.cableId);
         if (!cab) return { x: 0, y: 0 };
-        return getDotWorldPos(cab, ref);
+        return getDotWorldPos(cab, ref, connections);
     };
 
     const p1 = getPos(conn.from);

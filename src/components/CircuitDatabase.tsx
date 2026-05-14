@@ -15,7 +15,10 @@ interface Props {
 
 export const CircuitDatabase: React.FC<Props> = ({ connections, cables, networkEquipments, workZones, onClose }) => {
   // Group unique circuit names
-  const circuits: string[] = Array.from(new Set(connections.filter(c => c.circuitName).map(c => c.circuitName as string)));
+  const circuitNames = connections.map(c => c.circuitName).filter((n): n is string => !!n);
+  const circuits: string[] = circuitNames
+    .filter((name, index) => circuitNames.indexOf(name) === index)
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
 
   const handleExport = async (names: string[]) => {
     const workbook = new ExcelJS.Workbook();
@@ -24,7 +27,7 @@ export const CircuitDatabase: React.FC<Props> = ({ connections, cables, networkE
     // Define columns based on the requested format
     worksheet.columns = [
       { header: 'Hops', key: 'hops', width: 8 },
-      { header: 'Workzone', key: 'workzone', width: 12 },
+      { header: 'Location', key: 'location', width: 25 },
       { header: 'Circuit Name', key: 'circuitName', width: 20 },
       { header: 'Source', key: 'sourceCable', width: 20 },
       { header: 'Source Port', key: 'sourcePort', width: 12 },
@@ -77,7 +80,7 @@ export const CircuitDatabase: React.FC<Props> = ({ connections, cables, networkE
         }
         const cab = cables.find(ca => ca.id === ref.cableId);
         if (!cab) return { x: 0, y: 0 };
-        return getDotWorldPos(cab, ref);
+        return getDotWorldPos(cab, ref, connections);
       };
 
       const dotsEqual = (a: any, b: any) => {
@@ -127,21 +130,11 @@ export const CircuitDatabase: React.FC<Props> = ({ connections, cables, networkE
           ? `${destEquipObj.name} (${destEquipObj.building})` 
           : (destCableObj?.name || 'Unknown');
         
-        let workzone = 'Unknown';
-        const p1 = getPos(fromDot);
-        const p2 = getPos(toDot);
-        const midX = (p1.x + p2.x) / 2;
-        const midY = (p1.y + p2.y) / 2;
+        const location = sourceCableObj?.location || destCableObj?.location || 'N/A';
         
-        const zone = workZones.find(z => 
-          midX >= z.x && midX <= z.x + z.width &&
-          midY >= z.y && midY <= z.y + z.height
-        );
-        if (zone) workzone = zone.label;
-
         return {
           hops: hopCount++,
-          workzone,
+          location,
           circuitName: name,
           sourceCable: sourceName,
           sourcePort: fromDot.equipmentId ? `PORT ${fromDot.strandIdx + 1}` : fromDot.side.toUpperCase(),

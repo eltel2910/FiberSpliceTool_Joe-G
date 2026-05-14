@@ -36,6 +36,7 @@ export interface Tube {
 export interface CableData {
   id: string;
   name: string;
+  location?: string;
   to?: string;
   from?: string;
   fiberCount: number;
@@ -44,6 +45,7 @@ export interface CableData {
   y: number;
   leftExp: number[];
   rightExp: number[];
+  isCollapsed?: boolean;
 }
 
 export interface NetworkEquipment {
@@ -192,11 +194,9 @@ export function getCableStructure(fiberCount: number): Tube[] {
   });
 }
 
-export function getDotWorldPos(cable: CableData, ref: DotRef): { x: number; y: number } {
+export function getDotWorldPos(cable: CableData, ref: DotRef, connections: Connection[] = []): { x: number; y: number } {
   if (ref.equipmentId) {
-    // This function is generally called with the node as the first arg.
-    // In App.tsx, we need to adapt this.
-    return { x: 0, y: 0 }; // Placeholder, will handle in App.tsx
+    return { x: 0, y: 0 }; 
   }
 
   const isLeft = ref.side === 'left';
@@ -208,9 +208,17 @@ export function getDotWorldPos(cable: CableData, ref: DotRef): { x: number; y: n
 
   let finalY = LAYOUT.TUBE_PAD;
   for(let i=0; i<ref.tubeIdx; i++) {
-    finalY += LAYOUT.TUBE_H;
-    if (expandedTubes.includes(i)) {
-      finalY += expandH;
+    const isTubeInUse = connections.some(conn => 
+      (conn.from.cableId === cable.id && conn.from.tubeIdx === i) ||
+      (conn.to.cableId === cable.id && conn.to.tubeIdx === i)
+    );
+    const isVisible = !cable.isCollapsed || isTubeInUse;
+
+    if (isVisible) {
+      finalY += LAYOUT.TUBE_H;
+      if (expandedTubes.includes(i)) {
+        finalY += expandH;
+      }
     }
   }
   

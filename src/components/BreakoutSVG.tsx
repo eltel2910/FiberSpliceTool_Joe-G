@@ -57,7 +57,8 @@ export const BreakoutSVG: React.FC<BreakoutSVGProps> = ({
       className="overflow-visible block select-none"
       xmlns="http://www.w3.org/2000/svg"
     >
-      {tubes.map((tube, ti) => {
+      {tubes.map((tube) => {
+        const ti = tube.index - 1;
         const pillCY = curY + LAYOUT.TUBE_H / 2;
         const pillY = pillCY - LAYOUT.PILL_H / 2;
         const isExpanded = expandedTubes.includes(ti);

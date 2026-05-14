@@ -17,6 +17,7 @@ interface NetworkNodeProps {
   onDotDoubleClick: (e: React.MouseEvent, ref: DotRef) => void;
   onDotHover: (e: React.MouseEvent, ref: DotRef, isEnter: boolean) => void;
   onUpdateCircuitName: (paths: Connection[], name: string) => void;
+  onDotClick?: (e: React.MouseEvent, ref: DotRef) => void;
 }
 
 export const NetworkNode: React.FC<NetworkNodeProps> = ({
@@ -33,6 +34,7 @@ export const NetworkNode: React.FC<NetworkNodeProps> = ({
   onDotDoubleClick,
   onDotHover,
   onUpdateCircuitName,
+  onDotClick,
 }) => {
   const nodeRef = useRef<HTMLDivElement>(null);
   const isLeft = equipment.side === 'left';
@@ -242,6 +244,10 @@ export const NetworkNode: React.FC<NetworkNodeProps> = ({
                   }}
                   onMouseEnter={(e) => onDotHover(e, ref, true)}
                   onMouseLeave={(e) => onDotHover(e, ref, false)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDotClick?.(e, ref);
+                  }}
                 />
               </g>
             );

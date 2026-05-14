@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Plus, Maximize, MousePointer2, Move, Cable, Download, Square, Share2, Zap, BoxSelect, FileCode, Trash2, Database, ImageIcon, FileType, ChevronDown, Copy, Folder, Layers, Settings, Printer, Server } from 'lucide-react';
-import { toPng } from 'html-to-image';
+import { toPng, toJpeg } from 'html-to-image';
 import { saveAs } from 'file-saver';
 import { exportToDXF } from './services/dxfService';
 import { exportToPDF } from './services/pdfService';
@@ -31,7 +31,9 @@ export default function App() {
   });
   const [selectionBox, setSelectionBox] = useState<{ start: { x: number, y: number }, end: { x: number, y: number } } | null>(null);
   const [showCircuitList, setShowCircuitList] = useState(false);
-  const [tool, setTool] = useState<'select' | 'workzone' | 'analysis'>('select');
+  const [tool, setTool] = useState<'select' | 'workzone' | 'analysis' | 'bulk-delete' | 'vfl'>('select');
+  const [bulkSelectedConnectionIds, setBulkSelectedConnectionIds] = useState<string[]>([]);
+  const [vflCircuit, setVflCircuit] = useState<Connection[]>([]);
   const [openMenu, setOpenMenu] = useState<'cable' | 'equip' | null>(null);
   const menuTimeoutRef = useRef<number | null>(null);
 
@@ -98,8 +100,9 @@ export default function App() {
       if (target.closest('select')) return;
       if (target.closest('button')) return;
       if (target.classList.contains('cursor-pointer') || target.classList.contains('fiber-hit-area')) return;
+      if (target.closest('.bulk-delete-fiber')) return;
 
-      const isLasso = tool === 'select' || (tool === 'analysis' && e.ctrlKey);
+      const isLasso = tool === 'select' || tool === 'workzone' || tool === 'bulk-delete' || tool === 'vfl' || (tool === 'analysis' && e.ctrlKey);
       
       if (isLasso) {
         const rect = containerRef.current?.getBoundingClientRect();
@@ -110,7 +113,11 @@ export default function App() {
 
         setSelectionBox({ start: { x, y }, end: { x, y } });
         
-        if (e.ctrlKey || e.metaKey) {
+        if (tool === 'bulk-delete') {
+          if (!e.ctrlKey && !e.metaKey) {
+            setBulkSelectedConnectionIds([]);
+          }
+        } else if (e.ctrlKey || e.metaKey) {
           initialSelectedDotsRef.current = [...selectedDots];
           initialSelectedAnalysisDotsRef.current = [...selectedAnalysisDots];
         } else {
@@ -139,8 +146,8 @@ export default function App() {
     }
     const cable = cables.find(c => c.id === ref.cableId);
     if (!cable) return { x: 0, y: 0 };
-    return getDotWorldPos(cable, ref);
-  }, [cables, networkEquipments]);
+    return getDotWorldPos(cable, ref, connections);
+  }, [cables, networkEquipments, connections]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     const rect = containerRef.current?.getBoundingClientRect();
@@ -159,11 +166,40 @@ export default function App() {
     if (selectionBox) {
       setSelectionBox(prev => prev ? { ...prev, end: { x, y } } : null);
       
-      if (tool === 'select' || (tool === 'analysis' && e.ctrlKey)) {
+      if (tool === 'select' || tool === 'bulk-delete' || tool === 'vfl' || (tool === 'analysis' && e.ctrlKey)) {
         const xMin = Math.min(selectionBox.start.x, x);
         const xMax = Math.max(selectionBox.start.x, x);
         const yMin = Math.min(selectionBox.start.y, y);
         const yMax = Math.max(selectionBox.start.y, y);
+
+        if (tool === 'bulk-delete') {
+          const newlySelected: string[] = [];
+          connections.forEach(conn => {
+            const p1 = getNodeWorldPos(conn.from);
+            const p2 = getNodeWorldPos(conn.to);
+            // Simple check: if either end is in box, or center is in box
+            const cx = (p1.x + p2.x) / 2;
+            const cy = (p1.y + p2.y) / 2;
+            
+            const isP1In = p1.x >= xMin && p1.x <= xMax && p1.y >= yMin && p1.y <= yMax;
+            const isP2In = p2.x >= xMin && p2.x <= xMax && p2.y >= yMin && p2.y <= yMax;
+            const isCenterIn = cx >= xMin && cx <= xMax && cy >= yMin && cy <= yMax;
+
+            if (isP1In || isP2In || isCenterIn) {
+              newlySelected.push(conn.id);
+            }
+          });
+
+          setBulkSelectedConnectionIds(prev => {
+            const base = (e.ctrlKey || e.metaKey) ? prev : [];
+            const combined = [...base];
+            newlySelected.forEach(id => {
+              if (!combined.includes(id)) combined.push(id);
+            });
+            return combined;
+          });
+          return;
+        }
 
         const newlySelected: DotRef[] = [];
         cables.forEach(cable => {
@@ -499,6 +535,59 @@ export default function App() {
     }
   };
 
+  const handleJPEGExport = async () => {
+    if (!worldRef.current) return;
+    
+    const world = worldRef.current;
+    
+    // Add export mode class to trigger dark on white styles
+    world.classList.add('export-mode');
+    
+    // Sync input/textarea values to DOM attributes so html-to-image captures them
+    const inputs = world.querySelectorAll('input, textarea');
+    inputs.forEach(input => {
+      if (input.tagName.toLowerCase() === 'textarea') {
+        input.textContent = (input as HTMLTextAreaElement).value;
+      } else {
+        input.setAttribute('value', (input as HTMLInputElement).value);
+      }
+    });
+    
+    try {
+      // Give the browser a moment to repaint with the new class
+      await new Promise(r => setTimeout(r, 400));
+      
+      const dataUrl = await toJpeg(world, {
+        backgroundColor: '#ffffff',
+        pixelRatio: 4, // High resolution
+        quality: 1.0,
+      });
+      
+      const link = document.createElement('a');
+      link.download = `fibersync-highres-${new Date().getTime()}.jpg`;
+      link.href = dataUrl;
+      link.click();
+    } catch (err) {
+      console.error('JPEG Export failed:', err);
+    } finally {
+      world.classList.remove('export-mode');
+    }
+  };
+
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // Clear confirm state if selection changes or tool changes
+  useEffect(() => {
+    setShowDeleteConfirm(false);
+  }, [bulkSelectedConnectionIds.length, tool]);
+
+  const handleExecuteBulkDelete = () => {
+    const idsToRemove = new Set(bulkSelectedConnectionIds);
+    setConnections(prev => prev.filter(c => !idsToRemove.has(c.id)));
+    setBulkSelectedConnectionIds([]);
+    setShowDeleteConfirm(false);
+  };
+
   const handleDownload = async () => {
     if (!worldRef.current) return;
     
@@ -523,7 +612,7 @@ export default function App() {
       
       const dataUrl = await toPng(world, {
         backgroundColor: '#ffffff',
-        pixelRatio: 2,
+        pixelRatio: 3, // Increased from 2 for better detail
       });
       
       const link = document.createElement('a');
@@ -857,6 +946,7 @@ export default function App() {
   };
 
   useEffect(() => {
+    document.title = 'Fiber Splice Tool Pro';
     resetView();
   }, []);
 
@@ -874,7 +964,7 @@ export default function App() {
                 <Cable className="w-5 h-5 text-[#0a0c12] stroke-[2.5]" />
               </div>
               <div className="flex flex-col">
-                <span className="text-[0.45rem] font-black text-[var(--accent)] tracking-[4px] uppercase leading-none mb-1">PRO SCHEMATIC HUB</span>
+                <span className="text-[0.45rem] font-black text-[var(--accent)] tracking-[4px] uppercase leading-none mb-1">FIBER SPLICE TOOL PRO</span>
                 <input 
                   type="text" 
                   value={projectName}
@@ -900,6 +990,28 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-4">
+            <div className="hidden md:flex flex-col items-end mr-4 border-r border-white/5 pr-4 leading-tight">
+              <div className="flex items-center gap-1.5 font-bold tracking-wider">
+                <span className="text-[0.95rem] text-white/50">Created By:</span>
+                <a 
+                  href="https://www.linkedin.com/in/georgegodby/" 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="text-[0.95rem] text-white/80 hover:text-[var(--accent)] transition-colors"
+                >
+                  Joe Godby - <span className="underline decoration-white/20">linkedin.com/in/georgegodby/</span>
+                </a>
+              </div>
+              <a 
+                href="https://buymeacoffee.com/broadbandengineering" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="text-[0.8rem] font-bold text-[var(--accent)] hover:brightness-125 transition-all mt-1"
+              >
+                Please Help Support: <span className="underline opacity-80 italic tracking-wide">https://buymeacoffee.com/broadbandengineering</span>
+              </a>
+            </div>
+
             <div className={`flex items-center gap-2.5 px-4 py-1.5 rounded-full border transition-all ${isSaving ? 'bg-orange-500/10 border-orange-500/30' : 'bg-green-500/5 border-green-500/20'}`}>
               <div className={`w-1.5 h-1.5 rounded-full ${isSaving ? 'bg-orange-500 animate-pulse' : 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]'}`} />
               <span className="text-[0.55rem] font-mono text-white/50 uppercase tracking-widest font-bold">
@@ -942,17 +1054,13 @@ export default function App() {
             </div>
             
             <div className="h-4 w-px bg-white/10" />
-            
-            <div className="flex items-center gap-1">
-              <button className="icon-btn-refined"><Layers size={13} /><span className="hidden xl:inline text-[0.55rem] font-bold tracking-widest uppercase">Layer Opts</span></button>
-              <button className="icon-btn-refined"><Settings size={13} /><span className="hidden xl:inline text-[0.55rem] font-bold tracking-widest uppercase">Automation</span></button>
-            </div>
           </div>
 
           <div className="flex items-center gap-2">
             <span className="text-[0.5rem] font-mono text-white/20 uppercase tracking-[3px] mr-2">Export Protocol</span>
             <div className="ribbon-group">
-              <button onClick={handleDownload} className="export-btn" title="Raster Overlay"><ImageIcon size={14} /></button>
+              <button onClick={handleDownload} className="export-btn" title="Download PNG (3x Resolution)"><ImageIcon size={14} /></button>
+              <button onClick={handleJPEGExport} className="export-btn border-l border-white/5" title="High Res JPEG (Ultra Quality)"><FileType size={14} className="text-orange-400" /></button>
               <button onClick={handleSVGExport} className="export-btn border-l border-white/5" title="Vector (Visio/CAD)"><BoxSelect size={14} /></button>
               <button onClick={handleDXFExport} className="export-btn border-l border-white/5" title="Engineering DXF"><FileCode size={14} /></button>
               <button onClick={handlePDFExport} className="export-btn border-l border-white/5" title="Inspection PDF"><Printer size={14} /></button>
@@ -973,13 +1081,23 @@ export default function App() {
         <div className="flex flex-col items-center gap-4">
           {[
             { id: 'select', icon: MousePointer2, label: 'Selection' },
-            { id: 'analysis', icon: Share2, label: 'Circuit Tracer' },
+            { id: 'analysis', icon: Share2, label: 'Circuit Naming Tool' },
+            { id: 'vfl', icon: Zap, label: 'VFL Laser' },
             { id: 'workzone', icon: Square, label: 'Zone Boundary' },
+            { id: 'bulk-delete', icon: Trash2, label: 'Bulk Delete' },
           ].map(t => (
             <div key={t.id} className="relative group">
               <button 
-                onClick={() => setTool(t.id as any)}
-                className={`sidebar-tool-btn ${tool === t.id ? 'active' : ''}`}
+                onClick={() => {
+                  setTool(t.id as any);
+                  if (t.id !== 'bulk-delete') {
+                    setBulkSelectedConnectionIds([]);
+                  }
+                  if (t.id !== 'vfl') {
+                    setVflCircuit([]);
+                  }
+                }}
+                className={`sidebar-tool-btn ${tool === t.id ? 'active' : ''} ${t.id === 'bulk-delete' ? 'hover:bg-red-500/20 text-red-400' : ''} ${t.id === 'vfl' ? 'hover:bg-red-500/20 text-red-500' : ''}`}
               >
                 <t.icon size={19} />
                 <div className="sidebar-label">{t.label} Tool</div>
@@ -1061,7 +1179,7 @@ export default function App() {
                       <div className="flex flex-col gap-1.5">
                         <label className="text-[0.4rem] uppercase font-black text-white/20 tracking-widest ml-1">Rack Capacity</label>
                         <div className="grid grid-cols-4 gap-1.5">
-                          {[12, 16, 24, 48, 96].map(count => (
+                          {[2, 4, 8, 12, 16, 24, 48, 96].map(count => (
                             <button 
                               key={count} 
                               onClick={(e) => { e.stopPropagation(); setSelectedPortCount(count); }}
@@ -1148,8 +1266,10 @@ export default function App() {
         className={`flex-1 relative overflow-hidden transition-all duration-300 mt-[104px] ml-20 ${
           tool === 'select' 
             ? 'cursor-crosshair' 
-            : tool === 'analysis' 
+            : tool === 'analysis' || tool === 'vfl'
             ? 'cursor-pointer' 
+            : tool === 'bulk-delete'
+            ? 'cursor-default'
             : 'cursor-cell'
         }`}
         onMouseDown={handleMouseDown}
@@ -1165,6 +1285,10 @@ export default function App() {
         >
           {tool === 'analysis' && (
             <div className="absolute inset-0 pointer-events-none bg-blue-500/5 animate-pulse" />
+          )}
+
+          {tool === 'bulk-delete' && (
+            <div className="absolute inset-0 pointer-events-none bg-pink-500/10 animate-pulse duration-[3000ms]" />
           )}
 
           {/* Selection Box overlay */}
@@ -1267,11 +1391,27 @@ export default function App() {
                   findCircuitPath(dot, connections).some(p => p.id === conn.id)
                 );
 
+                const isBulkSelected = bulkSelectedConnectionIds.includes(conn.id);
+                const isVflActive = vflCircuit.some(c => c.id === conn.id);
+
                 return (
                   <g 
                     key={conn.id} 
-                    className={`group ${tool === 'analysis' ? 'cursor-help' : 'cursor-pointer'}`} 
+                    className={`group ${tool === 'analysis' || tool === 'vfl' ? 'cursor-help' : tool === 'bulk-delete' ? 'cursor-pointer pointer-events-auto bulk-delete-fiber' : 'cursor-pointer'}`} 
                     onClick={(e) => {
+                      if (tool === 'bulk-delete') {
+                        e.stopPropagation();
+                        setBulkSelectedConnectionIds(prev => 
+                          prev.includes(conn.id) ? prev.filter(id => id !== conn.id) : [...prev, conn.id]
+                        );
+                        return;
+                      }
+                      if (tool === 'vfl') {
+                        e.stopPropagation();
+                        const path = findCircuitPath(conn.from, connections);
+                        setVflCircuit(path);
+                        return;
+                      }
                       if (tool === 'analysis') {
                         if (e.ctrlKey || e.metaKey) {
                           setSelectedAnalysisDots(prev => {
@@ -1291,7 +1431,7 @@ export default function App() {
                       stroke="transparent"
                       strokeWidth="15"
                       fill="none"
-                      className={tool === 'analysis' ? 'pointer-events-auto' : 'pointer-events-none'}
+                      className={(tool === 'analysis' || tool === 'bulk-delete' || tool === 'vfl') ? 'pointer-events-auto' : 'pointer-events-none'}
                     />
                     {isInspected && (
                       <path 
@@ -1304,12 +1444,40 @@ export default function App() {
                     )}
                     <path 
                       d={`M${p1.x},${p1.y} C${cp1x},${p1.y} ${cp2x},${p2.y} ${p2.x},${p2.y}`}
-                      stroke={isInspected ? "#a3ff00" : tubeColor}
-                      strokeWidth={isInspected ? "4" : "2.5"}
+                      stroke={isBulkSelected ? "#ff3b3b" : (isInspected ? "#a3ff00" : tubeColor)}
+                      strokeWidth={isBulkSelected ? "5" : (isInspected ? "4" : "2.5")}
                       fill="none"
-                      strokeOpacity={isInspected ? "1" : "0.8"}
-                      className={`drop-shadow-[0_0_5px_rgba(255,255,255,0.2)] transition-all ${isInspected ? 'animate-pulse' : ''}`}
+                      strokeOpacity={(isInspected || isBulkSelected) ? "1" : "0.8"}
+                      className={`drop-shadow-[0_0_5px_rgba(255,255,255,0.2)] transition-all ${isInspected ? 'animate-pulse' : ''} ${isBulkSelected ? 'drop-shadow-[0_0_8px_rgba(255,59,59,0.8)]' : ''}`}
                     />
+                    {isVflActive && (
+                      <>
+                        <motion.path 
+                          d={`M${p1.x},${p1.y} C${cp1x},${p1.y} ${cp2x},${p2.y} ${p2.x},${p2.y}`}
+                          stroke="#32ff00"
+                          strokeWidth="8"
+                          fill="none"
+                          strokeOpacity="0.4"
+                          className="blur-[6px] pointer-events-none"
+                        />
+                        <motion.path 
+                          d={`M${p1.x},${p1.y} C${cp1x},${p1.y} ${cp2x},${p2.y} ${p2.x},${p2.y}`}
+                          stroke="#32ff00"
+                          strokeWidth="4"
+                          fill="none"
+                          strokeDasharray="15 25"
+                          animate={{ 
+                            strokeDashoffset: [0, -80],
+                            opacity: [0.7, 1, 0.7]
+                          }}
+                          transition={{ 
+                            strokeDashoffset: { duration: 1.2, repeat: Infinity, ease: "linear" },
+                            opacity: { duration: 0.6, repeat: Infinity, ease: "easeInOut" }
+                          }}
+                          className="drop-shadow-[0_0_15px_#32ff00] drop-shadow-[0_0_5px_#fff] z-50 pointer-events-none"
+                        />
+                      </>
+                    )}
                     {conn.circuitName && (
                       <g className="pointer-events-none">
                         <text
@@ -1341,8 +1509,8 @@ export default function App() {
                       
                       if (!isPart) return null;
 
-                      const p1 = getDotWorldPos(cable, dLeft);
-                      const p2 = getDotWorldPos(cable, dRight);
+                      const p1 = getDotWorldPos(cable, dLeft, connections);
+                      const p2 = getDotWorldPos(cable, dRight, connections);
                       
                       return (
                         <line 
@@ -1410,6 +1578,7 @@ export default function App() {
             <CableNode 
               key={cable.id}
               cable={cable}
+              connections={connections}
               scale={scale}
               selectedDots={selectedDots}
               selectedAnalysisDots={selectedAnalysisDots}
@@ -1434,6 +1603,9 @@ export default function App() {
                   } else {
                     setSelectedAnalysisDots([ref]);
                   }
+                } else if (tool === 'vfl') {
+                  const path = findCircuitPath(ref, connections);
+                  setVflCircuit(path);
                 }
               }}
             />
@@ -1455,6 +1627,23 @@ export default function App() {
               onDotMouseUp={handleDotMouseUp}
               onDotDoubleClick={handleDotDoubleClick}
               onDotHover={handleDotHover}
+              onDotClick={(e, ref) => {
+                if (tool === 'analysis') {
+                  if (e.ctrlKey || e.metaKey) {
+                    setSelectedAnalysisDots(prev => {
+                      if (prev.some(d => dotsEqual(d, ref))) {
+                        return prev.filter(d => !dotsEqual(d, ref));
+                      }
+                      return [...prev, ref];
+                    });
+                  } else {
+                    setSelectedAnalysisDots([ref]);
+                  }
+                } else if (tool === 'vfl') {
+                  const path = findCircuitPath(ref, connections);
+                  setVflCircuit(path);
+                }
+              }}
               onUpdateCircuitName={(paths, name) => {
                 const pathIds = new Set(paths.map(p => p.id));
                 setConnections(prev => prev.map(c => 
@@ -1506,6 +1695,54 @@ export default function App() {
               }}
               onClose={() => setSelectedAnalysisDots([])}
             />
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {tool === 'bulk-delete' && bulkSelectedConnectionIds.length > 0 && (
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-6 bg-[#1a0a0c]/95 backdrop-blur-2xl border border-red-500/30 px-6 py-4 rounded-3xl shadow-[0_20px_50px_rgba(239,68,68,0.2)]"
+            >
+              <div className="flex flex-col">
+                <span className="text-red-400 font-black text-xs uppercase tracking-[3px] leading-none mb-1">Bulk Deletion Mode</span>
+                <span className="text-white/60 text-[0.6rem] font-mono uppercase tracking-[1px]">{bulkSelectedConnectionIds.length} FIBERS MARKED FOR TERMINATION</span>
+              </div>
+              <div className="h-10 w-px bg-white/10" />
+              <div className="flex items-center gap-3">
+                <button 
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (showDeleteConfirm) {
+                      setShowDeleteConfirm(false);
+                    } else {
+                      setBulkSelectedConnectionIds([]);
+                    }
+                  }}
+                  className="px-4 py-2 text-[0.6rem] font-black text-white/40 hover:text-white uppercase tracking-[2px] transition-colors pointer-events-auto"
+                >
+                  {showDeleteConfirm ? 'Cancel' : 'Clear'}
+                </button>
+                <button 
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (showDeleteConfirm) {
+                      handleExecuteBulkDelete();
+                    } else {
+                      setShowDeleteConfirm(true);
+                    }
+                  }}
+                  className={`${showDeleteConfirm ? 'bg-orange-500 hover:bg-orange-600' : 'bg-red-500 hover:bg-red-600'} text-white px-6 py-2.5 rounded-xl text-[0.65rem] font-black uppercase tracking-[2px] shadow-[0_0_20px_rgba(239,68,68,0.4)] hover:shadow-[0_0_30px_rgba(239,68,68,0.6)] transition-all flex items-center gap-2 pointer-events-auto`}
+                >
+                  <Trash2 size={14} />
+                  {showDeleteConfirm ? 'CONFIRM PERMANENT DELETE' : 'Execute Deletion'}
+                </button>
+              </div>
+            </motion.div>
           )}
         </AnimatePresence>
       </div>

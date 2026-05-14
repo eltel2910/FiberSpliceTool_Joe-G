@@ -64,7 +64,13 @@ export const exportToPDF = (
     const expandH = LAYOUT.STRAND_PAD_V * 2 + 12 * LAYOUT.STRAND_STEP;
     
     const calculateFullH = (expanded: number[]) => {
-        return LAYOUT.TUBE_PAD + cable.tubes.length * LAYOUT.TUBE_H + (expanded.length * expandH) + LAYOUT.TUBE_PAD;
+        const visibleTubes = cable.tubes.filter((_, ti) => 
+            !cable.isCollapsed || connections.some(c => 
+                (c.from.cableId === cable.id && c.from.tubeIdx === ti) || 
+                (c.to.cableId === cable.id && c.to.tubeIdx === ti)
+            )
+        );
+        return LAYOUT.TUBE_PAD + visibleTubes.length * LAYOUT.TUBE_H + (expanded.length * expandH) + LAYOUT.TUBE_PAD;
     };
     
     const leftH = calculateFullH(cable.leftExp);
@@ -77,24 +83,38 @@ export const exportToPDF = (
     const cw = toMM(totalW);
     const ch = toMM(totalH);
 
-    doc.setFillColor(245, 250, 255);
-    doc.setDrawColor(0, 50, 150);
-    doc.setLineWidth(0.5);
+    doc.setFillColor(203, 213, 225);
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(1.0);
     doc.rect(cx, cy, cw, ch, 'FD');
     
     // Partitions
+    doc.setLineWidth(0.4);
     doc.line(cx + toMM(leftSVGWidth), cy, cx + toMM(leftSVGWidth), cy + ch);
     doc.line(cx + toMM(leftSVGWidth + trunkWidth), cy, cx + toMM(leftSVGWidth + trunkWidth), cy + ch);
 
+    doc.setTextColor(0, 50, 150);
+    doc.setFontSize(6);
+    doc.setFont('helvetica', 'bold');
+    doc.text('LOCATION', cx + toMM(leftSVGWidth + trunkWidth / 2), cy + 6, { align: 'center' });
+
+    doc.setTextColor(30, 30, 30);
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    const locationLines = doc.splitTextToSize(cable.location || '---', toMM(trunkWidth) - 4);
+    doc.text(locationLines, cx + toMM(leftSVGWidth + trunkWidth / 2), cy + 11, { align: 'center' });
+
     doc.setTextColor(0, 0, 0);
-    doc.setFontSize(10);
+    doc.setFontSize(9);
     doc.setFont('helvetica', 'bold');
     // Split name in case of newlines
-    const nameLines = doc.splitTextToSize(cable.name, toMM(trunkWidth) - 2);
-    doc.text(nameLines, cx + toMM(leftSVGWidth + trunkWidth / 2), cy + 10, { align: 'center' });
+    const nameLines = doc.splitTextToSize(cable.name, toMM(trunkWidth) - 4);
+    let nextY = 11 + (locationLines.length * 5);
+    doc.line(cx + toMM(leftSVGWidth + 10), cy + nextY - 1, cx + toMM(leftSVGWidth + trunkWidth - 10), cy + nextY - 1);
+    doc.text(nameLines, cx + toMM(leftSVGWidth + trunkWidth / 2), cy + nextY + 4, { align: 'center' });
     
     // Add TO/FROM if they exist
-    let extraY = 10 + (nameLines.length * 4);
+    let extraY = nextY + 4 + (nameLines.length * 4);
     doc.setFontSize(7);
     doc.setFont('helvetica', 'normal');
     if (cable.to) {
@@ -116,6 +136,12 @@ export const exportToPDF = (
 
         let curY = cable.y + LAYOUT.TUBE_PAD;
         cable.tubes.forEach((tube, ti) => {
+            const isVisible = !cable.isCollapsed || connections.some(c => 
+                (c.from.cableId === cable.id && c.from.tubeIdx === ti) || 
+                (c.to.cableId === cable.id && c.to.tubeIdx === ti)
+            );
+            if (!isVisible) return;
+
             const pillCY = curY + LAYOUT.TUBE_H / 2;
             const absolutePillX = cable.x + sideXOffset + pillX;
             const absolutePillOutX = cable.x + sideXOffset + pillOutX;
@@ -215,7 +241,7 @@ export const exportToPDF = (
         }
         const cab = cables.find(c => c.id === ref.cableId);
         if (!cab) return { x: 0, y: 0 };
-        return getDotWorldPos(cab, ref);
+        return getDotWorldPos(cab, ref, connections);
     };
 
     const p1 = getPos(conn.from);
