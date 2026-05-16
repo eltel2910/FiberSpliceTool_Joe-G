@@ -90,6 +90,7 @@
   text-shadow: none !important;
   background: transparent !important;
   -webkit-text-fill-color: #c00000 !important;
+  text-align: center !important;
 }
 
 .export-mode .network-chassis {

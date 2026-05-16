@@ -83,6 +83,7 @@ export const LAYOUT = {
   FIBER_GAP: 8,
   BO_TUBE_ONLY: 120,
   BO_EXPANDED: 240,
+  TRUNK_WIDTH: 168,
   EQUIP_PORT_GAP: 24,
   EQUIP_WIDTH: 240,
 };
@@ -231,7 +232,7 @@ export function getDotWorldPos(cable: CableData, ref: DotRef, connections: Conne
   const localDotX = isLeft ? pillOutX - LAYOUT.FAN_GAP : pillOutX + LAYOUT.FAN_GAP;
 
   const leftSVGWidth = (cable.leftExp.length > 0 ? LAYOUT.BO_EXPANDED : LAYOUT.BO_TUBE_ONLY);
-  const trunkWidth = 164; 
+  const trunkWidth = LAYOUT.TRUNK_WIDTH; 
 
   let worldX = cable.x + localDotX;
   if (!isLeft) {

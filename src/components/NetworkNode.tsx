@@ -84,7 +84,7 @@ export const NetworkNode: React.FC<NetworkNodeProps> = ({
                 value={equipment.name}
                 onChange={(e) => onUpdate(equipment.id, { name: e.target.value })}
                 onMouseDown={(e) => e.stopPropagation()}
-                className="bg-transparent border-b border-white/5 focus:border-[var(--accent)] outline-none text-white font-bold text-[0.65rem] transition-all w-full"
+                className="bg-transparent border-b border-white/5 focus:border-[var(--accent)] outline-none text-white font-bold text-[0.975rem] transition-all w-full"
                 placeholder="Switch 01"
               />
             </div>
@@ -95,7 +95,7 @@ export const NetworkNode: React.FC<NetworkNodeProps> = ({
                 value={equipment.building}
                 onChange={(e) => onUpdate(equipment.id, { building: e.target.value })}
                 onMouseDown={(e) => e.stopPropagation()}
-                className="bg-transparent border-b border-white/5 focus:border-[var(--accent)] outline-none text-white/70 text-[0.6rem] transition-all w-full font-mono"
+                className="bg-transparent border-b border-white/5 focus:border-[var(--accent)] outline-none text-white/70 text-[0.9rem] transition-all w-full font-mono"
                 placeholder="BUILDING-01"
               />
             </div>
@@ -132,7 +132,7 @@ export const NetworkNode: React.FC<NetworkNodeProps> = ({
                     <input 
                       type="text"
                       placeholder={`P-${i+1}`}
-                      className={`bg-transparent border-none outline-none text-[0.55rem] font-mono text-[var(--accent)] placeholder:text-white/5 w-full uppercase ${isLeft ? 'text-right' : 'text-left'}`}
+                      className={`bg-transparent border-none outline-none text-[0.825rem] font-mono text-[var(--accent)] placeholder:text-white/5 w-full uppercase ${isLeft ? 'text-right' : 'text-left'}`}
                       value={circuitName}
                       onMouseDown={(e) => e.stopPropagation()}
                       onChange={(e) => {

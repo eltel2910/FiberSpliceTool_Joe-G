@@ -217,7 +217,7 @@ export const exportToPDF = (
     
     doc.setTextColor(0, 0, 0);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
+    doc.setFontSize(15);
     doc.text(eq.name, ex + 3, ey + 6);
     
     for (let i = 0; i < eq.ports; i++) {
@@ -264,7 +264,7 @@ export const exportToPDF = (
     doc.lines([[mx - x1, 0, mx - x1, y2 - y1, x2 - x1, y2 - y1]], x1, y1, [1, 1], 'S', false);
     
     if (conn.circuitName) {
-        doc.setFontSize(5);
+        doc.setFontSize(7.5);
         doc.setTextColor(0, 0, 0);
         doc.setFont('helvetica', 'bold');
         doc.text(`CIRCUIT: ${conn.circuitName}`, (x1 + x2) / 2, (y1 + y2) / 2 - 1, { align: 'center' });

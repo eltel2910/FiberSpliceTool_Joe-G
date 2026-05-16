@@ -82,7 +82,7 @@ export const exportToDXF = (
   cables.forEach(cable => {
     const leftSVGWidth = (cable.leftExp.length > 0 ? LAYOUT.BO_EXPANDED : LAYOUT.BO_TUBE_ONLY);
     const rightSVGWidth = (cable.rightExp.length > 0 ? LAYOUT.BO_EXPANDED : LAYOUT.BO_TUBE_ONLY);
-    const trunkWidth = 164;
+    const trunkWidth = LAYOUT.TRUNK_WIDTH;
     const expandH = LAYOUT.STRAND_PAD_V * 2 + 12 * LAYOUT.STRAND_STEP;
     
     const calculateFullH = (expanded: number[]) => {
@@ -198,11 +198,11 @@ export const exportToDXF = (
     const h = 80 + (eq.ports * 30);
     drawBox(eq.x, getCADY(eq.y), eq.x + w, getCADY(eq.y + h), 'Equipment');
     drawing.setActiveLayer('Text');
-    drawing.drawText(eq.x + 10, getCADY(eq.y + 35), 15, 0, eq.name);
+    drawing.drawText(eq.x + 10, getCADY(eq.y + 35), 22.5, 0, eq.name);
     
     for (let i = 0; i < eq.ports; i++) {
-        const portY = eq.y + 80 + (i * 30);
-        const portX = eq.side === 'left' ? eq.x + w : eq.x;
+        const portY = eq.y + 50 + 10 + (i * 30) + 15;
+        const portX = eq.side === 'left' ? eq.x + 10 : eq.x + 240 + LAYOUT.FAN_GAP;
         drawing.setActiveLayer('Equipment');
         drawing.drawCircle(portX, getCADY(portY), 5);
         drawing.setActiveLayer('Text');
@@ -217,8 +217,8 @@ export const exportToDXF = (
         if (ref.equipmentId) {
             const eq = equipments.find(e => e.id === ref.equipmentId);
             if (!eq) return { x: 0, y: 0 };
-            const portY = eq.y + 80 + (ref.strandIdx * 30);
-            const portX = eq.side === 'left' ? eq.x + 240 : eq.x;
+            const portY = eq.y + 50 + 10 + (ref.strandIdx * 30) + 15;
+            const portX = eq.side === 'left' ? eq.x + 10 : eq.x + 240 + LAYOUT.FAN_GAP;
             return { x: portX, y: portY };
         }
         const cab = cables.find(c => c.id === ref.cableId);
@@ -256,7 +256,7 @@ export const exportToDXF = (
         const tx = Math.pow(1-midT, 3) * p1.x + 3 * Math.pow(1-midT, 2) * midT * mx1 + 3 * (1-midT) * Math.pow(midT, 2) * mx1 + Math.pow(midT, 3) * p2.x;
         const ty = Math.pow(1-midT, 3) * p1.y + 3 * Math.pow(1-midT, 2) * midT * p1.y + 3 * (1-midT) * Math.pow(midT, 2) * p2.y + Math.pow(midT, 3) * p2.y;
         
-        drawing.drawText(tx, getCADY(ty - 5), 8, 0, `CIRCUIT: ${conn.circuitName}`);
+        drawing.drawText(tx, getCADY(ty - 5), 12, 0, `CIRCUIT: ${conn.circuitName}`);
     }
   });
 

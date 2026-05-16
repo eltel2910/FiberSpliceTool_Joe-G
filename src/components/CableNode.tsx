@@ -131,8 +131,8 @@ export const CableNode: React.FC<CableNodeProps> = ({
       {/* Trunk */}
       <div
         onMouseDown={(e) => onDragStart(e, cable.id)}
-        className="cable-trunk bg-linear-to-b from-[#1a1a1a] via-[#050505] to-[#121212] border-4 border-black rounded-xl relative flex flex-col items-center justify-start shadow-[inset_0_2px_4px_rgba(255,255,255,0.07),inset_0_-2px_4px_rgba(0,0,0,0.5),0_4px_15px_rgba(0,0,0,0.6)] px-4 min-w-[160px] cursor-grab active:cursor-grabbing mx-0 z-10 shrink-0 pointer-events-auto py-6"
-        style={{ height: trunkHeight }}
+        className="cable-trunk bg-linear-to-b from-[#1a1a1a] via-[#050505] to-[#121212] border-4 border-black rounded-xl relative flex flex-col items-center justify-start shadow-[inset_0_2px_4px_rgba(255,255,255,0.07),inset_0_-2px_4px_rgba(0,0,0,0.5),0_4px_15px_rgba(0,0,0,0.6)] px-4 cursor-grab active:cursor-grabbing mx-0 z-10 shrink-0 pointer-events-auto py-6"
+        style={{ height: trunkHeight, width: LAYOUT.TRUNK_WIDTH }}
       >
         <div className="absolute inset-x-4 inset-y-0 bg-[repeating-linear-gradient(90deg,transparent_0px,transparent_6px,rgba(255,255,255,0.025)_6px,rgba(255,255,255,0.025)_7px)] rounded-lg pointer-events-none" />
         <div className="relative z-10 font-mono text-[0.65rem] text-[rgba(200,220,255,0.6)] tracking-widest text-center leading-relaxed flex flex-col items-center w-full">
@@ -152,8 +152,8 @@ export const CableNode: React.FC<CableNodeProps> = ({
             onChange={(e) => onUpdate(cable.id, { name: e.target.value })}
             onMouseDown={(e) => e.stopPropagation()}
             placeholder="Asset Name"
-            rows={2}
-            className="cable-name-input text-sm text-white block glow-text mb-1 bg-transparent border-b border-transparent outline-none text-center w-full max-w-[140px] resize-none transition-all focus:border-[var(--accent)] hover:border-white/20 cursor-text overflow-hidden"
+            rows={3}
+            className="cable-name-input text-sm text-white block glow-text mb-1 bg-transparent border-b border-transparent outline-none text-center w-full max-w-[150px] resize-none transition-all focus:border-[var(--accent)] hover:border-white/20 cursor-text leading-tight"
           />
           <strong className="text-[0.6rem] text-[rgba(255,255,255,0.4)] block mb-1 uppercase tracking-[2px]">{cable.fiberCount}F Trunk</strong>
           

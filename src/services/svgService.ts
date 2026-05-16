@@ -49,7 +49,7 @@ export const exportToSVG = (
   cables.forEach(cable => {
     const leftSVGWidth = (cable.leftExp.length > 0 ? LAYOUT.BO_EXPANDED : LAYOUT.BO_TUBE_ONLY);
     const rightSVGWidth = (cable.rightExp.length > 0 ? LAYOUT.BO_EXPANDED : LAYOUT.BO_TUBE_ONLY);
-    const trunkWidth = 164;
+    const trunkWidth = LAYOUT.TRUNK_WIDTH;
     const expandH = LAYOUT.STRAND_PAD_V * 2 + 12 * LAYOUT.STRAND_STEP;
     
     const calculateFullH = (expanded: number[]) => {
@@ -85,7 +85,24 @@ export const exportToSVG = (
     let nextY = 50 + (locationLines.length * 25);
     svgLines.push(`    <line x1="${cable.x + leftSVGWidth + 20}" y1="${cable.y + nextY - 5}" x2="${cable.x + leftSVGWidth + trunkWidth - 20}" y2="${cable.y + nextY - 5}" stroke="#eee" stroke-width="1" />`);
 
-    const nameLines = cable.name.split('\n');
+    const wrapText = (text: string, maxChars: number) => {
+      const words = text.split(' ');
+      const lines: string[] = [];
+      let currentLine = '';
+      
+      words.forEach(word => {
+        if ((currentLine + word).length > maxChars) {
+          lines.push(currentLine.trim());
+          currentLine = word + ' ';
+        } else {
+          currentLine += word + ' ';
+        }
+      });
+      lines.push(currentLine.trim());
+      return lines;
+    };
+
+    const nameLines = cable.name.includes('\n') ? cable.name.split('\n') : wrapText(cable.name, 16);
     nameLines.forEach((line, i) => {
       svgLines.push(`    <text x="${cable.x + leftSVGWidth + trunkWidth / 2}" y="${cable.y + nextY + 25 + (i * 25)}" fill="#000" font-family="Helvetica" font-size="18" font-weight="bold" text-anchor="middle">${line}</text>`);
     });
@@ -165,11 +182,11 @@ export const exportToSVG = (
     const h = 80 + (eq.ports * 30);
     svgLines.push(`    <rect x="${eq.x}" y="${eq.y}" width="${w}" height="${h}" fill="#fcfcfe" stroke="#000" stroke-width="2" />`);
     svgLines.push(`    <rect x="${eq.x}" y="${eq.y}" width="${w}" height="60" fill="#eee" stroke="#000" stroke-width="2" />`);
-    svgLines.push(`    <text x="${eq.x + 15}" y="${eq.y + 40}" fill="#000" font-family="Helvetica, Arial, sans-serif" font-size="20" font-weight="bold">${eq.name}</text>`);
+    svgLines.push(`    <text x="${eq.x + 15}" y="${eq.y + 40}" fill="#000" font-family="Helvetica, Arial, sans-serif" font-size="30" font-weight="bold">${eq.name}</text>`);
     
     for (let i = 0; i < eq.ports; i++) {
-        const portY = eq.y + 80 + (i * 30);
-        const portX = eq.side === 'left' ? eq.x + w : eq.x;
+        const portY = eq.y + 50 + 10 + (i * 30) + 15;
+        const portX = eq.side === 'left' ? eq.x + 10 : eq.x + 240 + LAYOUT.FAN_GAP;
         svgLines.push(`    <circle cx="${portX}" cy="${portY}" r="6" fill="#fff" stroke="#000" stroke-width="1.5" />`);
         svgLines.push(`    <text x="${portX + (eq.side === 'left' ? 12 : -45)}" y="${portY + 6}" fill="#444" font-family="monospace" font-size="14" font-weight="bold">P${i + 1}</text>`);
     }
@@ -183,8 +200,8 @@ export const exportToSVG = (
         if (ref.equipmentId) {
             const eq = equipments.find(e => e.id === ref.equipmentId);
             if (!eq) return { x: 0, y: 0 };
-            const portY = eq.y + 80 + (ref.strandIdx * 30);
-            const portX = eq.side === 'left' ? eq.x + 240 : eq.x;
+            const portY = eq.y + 50 + 10 + (ref.strandIdx * 30) + 15;
+            const portX = eq.side === 'left' ? eq.x + 10 : eq.x + 240 + LAYOUT.FAN_GAP;
             return { x: portX, y: portY };
         }
         const cab = cables.find(c => c.id === ref.cableId);
@@ -208,7 +225,7 @@ export const exportToSVG = (
       const midT = 0.5;
       const tx = Math.pow(1-midT, 3) * p1.x + 3 * Math.pow(1-midT, 2) * midT * mx + 3 * (1-midT) * Math.pow(midT, 2) * mx + Math.pow(midT, 3) * p2.x;
       const ty = Math.pow(1-midT, 3) * p1.y + 3 * Math.pow(1-midT, 2) * midT * p1.y + 3 * (1-midT) * Math.pow(midT, 2) * p2.y + Math.pow(midT, 3) * p2.y;
-      svgLines.push(`    <text x="${tx}" y="${ty - 8}" fill="#000" font-family="Helvetica, Arial, sans-serif" font-size="12" text-anchor="middle" font-weight="bold">CIRCUIT: ${conn.circuitName}</text>`);
+      svgLines.push(`    <text x="${tx}" y="${ty - 8}" fill="#000" font-family="Helvetica, Arial, sans-serif" font-size="18" text-anchor="middle" font-weight="bold">CIRCUIT: ${conn.circuitName}</text>`);
     }
   });
   svgLines.push(`  </g>`);

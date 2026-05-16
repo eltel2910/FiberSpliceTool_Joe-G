@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, Maximize, MousePointer2, Move, Cable, Download, Square, Share2, Zap, BoxSelect, FileCode, Trash2, Database, ImageIcon, FileType, ChevronDown, Copy, Folder, Layers, Settings, Printer, Server } from 'lucide-react';
+import { Plus, Maximize, MousePointer2, Move, Cable, Download, Square, Share2, Zap, BoxSelect, FileCode, Trash2, Database, ImageIcon, FileType, ChevronDown, Copy, Folder, Layers, Settings, Printer, Server, X } from 'lucide-react';
 import { toPng, toJpeg } from 'html-to-image';
 import { saveAs } from 'file-saver';
 import { exportToDXF } from './services/dxfService';
@@ -9,7 +9,7 @@ import { exportToSVG } from './services/svgService';
 import { TIA_COLORS, getCableStructure, CableData, Connection, DotRef, DraggingLine, getDotWorldPos, WorkZone, dotsEqual, findCircuitPath, NetworkEquipment, LAYOUT } from './constants';
 import { auth, googleProvider, db, handleFirestoreError, OperationType } from './services/firebase';
 import { signInWithPopup, onAuthStateChanged, User, signOut } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, onSnapshot, serverTimestamp, Timestamp, writeBatch, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, onSnapshot, serverTimestamp, Timestamp, writeBatch, deleteDoc, orderBy, limit } from 'firebase/firestore';
 import { CableNode } from './components/CableNode';
 import { NetworkNode } from './components/NetworkNode';
 import { WorkZoneDialog } from './components/WorkZoneDialog';
@@ -860,27 +860,63 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  const loadLastProject = async (uid: string) => {
+  const [cloudError, setCloudError] = useState<string | null>(null);
+
+  const handleLogin = async () => {
+    setCloudError(null);
     try {
-      const q = query(collection(db, 'projects'), where('ownerId', '==', uid));
+      await signInWithPopup(auth, googleProvider);
+    } catch (error: any) {
+      console.error('Login error:', error);
+      if (error.code === 'auth/popup-blocked') {
+        setCloudError('Popup blocked by browser. Please allow popups for this site.');
+      } else if (error.code === 'auth/popup-closed-by-user') {
+        // User closed it, no need for error message
+      } else if (error.code === 'auth/unauthorized-domain') {
+        setCloudError('This domain is not authorized in Firebase Console. Add localhost to Authorized Domains.');
+      } else {
+        setCloudError(`Login failed: ${error.message}`);
+      }
+    }
+  };
+
+  const loadLastProject = async (uid: string) => {
+    setCloudError(null);
+    try {
+      // Query without orderby to avoid composite index requirements in default Firestore setups
+      const q = query(
+        collection(db, 'projects'), 
+        where('ownerId', '==', uid),
+        limit(50)
+      );
       const snapshot = await getDocs(q);
+      
+      // Sort in memory to be resilient to missing indices or missing updatedAt fields
       const projectList = snapshot.docs.map(doc => ({
         id: doc.id,
         name: doc.data().name || 'Untitled',
         updatedAt: doc.data().updatedAt
-      }));
+      })).sort((a, b) => {
+        const tA = (a.updatedAt as Timestamp)?.toMillis() || 0;
+        const tB = (b.updatedAt as Timestamp)?.toMillis() || 0;
+        return tB - tA;
+      });
+      
       setProjects(projectList);
       
-      if (!snapshot.empty) {
-        const latest = snapshot.docs.sort((a, b) => {
-          const tA = (a.data().updatedAt as Timestamp)?.toMillis() || 0;
-          const tB = (b.data().updatedAt as Timestamp)?.toMillis() || 0;
-          return tB - tA;
-        })[0];
-        
-        loadProjectData(latest.id, latest.data());
+      if (projectList.length > 0) {
+        // Find the most recently updated one from the sorted list
+        const latestId = projectList[0].id;
+        const latestDoc = snapshot.docs.find(d => d.id === latestId);
+        if (latestDoc) {
+          loadProjectData(latestDoc.id, latestDoc.data());
+        }
       }
-    } catch (error) {
+    } catch (error: any) {
+      const msg = error.message.includes('Quota') 
+        ? 'Data quota exceeded. Please try again tomorrow.' 
+        : 'Failed to load projects. Check console for details.';
+      setCloudError(msg);
       handleFirestoreError(error, OperationType.LIST, 'projects');
     }
   };
@@ -896,12 +932,7 @@ export default function App() {
 
   const saveToCloud = async (forceNew = false) => {
     if (!user) {
-      try {
-        await signInWithPopup(auth, googleProvider);
-      } catch (err) {
-        console.error('Login failed', err);
-        return;
-      }
+      await handleLogin();
       return;
     }
 
@@ -925,18 +956,27 @@ export default function App() {
         payload.createdAt = serverTimestamp();
         await setDoc(projectRef, payload);
         setActiveProjectId(projectId);
+        
+        // Optimistically update local project list
+        setProjects(prev => [{
+          id: projectId,
+          name: projectName,
+          updatedAt: Timestamp.now() // Close enough to server time for UI
+        }, ...prev].slice(0, 50));
       } else {
         await updateDoc(projectRef, payload);
+        
+        // Optimistically update local project list
+        setProjects(prev => prev.map(p => p.id === projectId ? {
+          ...p,
+          name: projectName,
+          updatedAt: Timestamp.now()
+        } : p).sort((a, b) => {
+          const tA = (a.updatedAt as Timestamp)?.toMillis() || 0;
+          const tB = (b.updatedAt as Timestamp)?.toMillis() || 0;
+          return tB - tA;
+        }));
       }
-
-      // Refresh project list
-      const q = query(collection(db, 'projects'), where('ownerId', '==', user.uid));
-      const snapshot = await getDocs(q);
-      setProjects(snapshot.docs.map(doc => ({
-        id: doc.id,
-        name: doc.data().name || 'Untitled',
-        updatedAt: doc.data().updatedAt
-      })));
 
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `projects/${activeProjectId}`);
@@ -956,6 +996,18 @@ export default function App() {
       
       {/* 1. Header (Primary Metadata & Global Actions) */}
       <header className="fixed top-0 left-0 right-0 z-[100] flex flex-col shadow-2xl">
+        {cloudError && (
+          <motion.div 
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            className="bg-red-600 text-white py-2 px-6 text-center text-xs font-bold flex items-center justify-center gap-3 overflow-hidden"
+          >
+            <span>{cloudError}</span>
+            <button onClick={() => setCloudError(null)} className="hover:bg-white/20 p-1 rounded transition-colors">
+              <X size={14} />
+            </button>
+          </motion.div>
+        )}
         {/* Row 1: Workspace Identity & Sync */}
         <div className="h-14 bg-[#0a0c12]/98 backdrop-blur-3xl border-b border-white/5 flex items-center px-6 justify-between">
           <div className="flex items-center gap-6">
@@ -1031,7 +1083,7 @@ export default function App() {
               </div>
             ) : (
               <button 
-                onClick={() => signInWithPopup(auth, googleProvider)}
+                onClick={handleLogin}
                 className="bg-[var(--accent)] text-[#0a0c12] px-5 py-2 rounded-xl text-[0.65rem] font-black uppercase tracking-[2px] hover:brightness-110 transition-all active:scale-95"
               >
                 Sign In
